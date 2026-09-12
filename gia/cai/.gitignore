@@ -1,0 +1,35 @@
+# Python
+control/server/.venv/
+control/server/.env
+__pycache__/
+*.pyc
+
+# Node
+control/worker/node_modules/
+setup/bridge/node_modules/
+
+# Env (el real no se commitea; .env.example si)
+.env
+.env.local
+
+# Local agent/ATL config
+.atl/
+
+# Offline setup binaries (pesan ~300MB); ver setup/INSTALL.txt para obtenerlos
+setup/node/
+setup/opencode/
+setup/git/
+
+# persistencia local de tareas (fallback sin DATABASE_URL)
+.cai_tasks.json
+
+# Built binaries
+control/gateway/gateway
+control/gateway/carlos-gateway
+control/carlos_code/carlos-code-linux
+control/carlos_code/carlos-code
+node_modules/
+
+# Credenciales del navegador DeepSeek (NUNCA commitear)
+control/gateway/credenciales/auth-profiles.json
+control/worker_code/worker-code

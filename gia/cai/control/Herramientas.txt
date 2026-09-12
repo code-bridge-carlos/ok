@@ -1,0 +1,945 @@
+=============================================================================
+  HERRAMIENTAS — Documentación Completa del Ecosistema
+  OpenCode + Gentle AI + Carlos Code (C3) + Worker Code (C6)
+  Última actualización: 2026-09-06
+=============================================================================
+
+
+═══════════════════════════════════════════════════════════════════════════════
+  PARTE 1: OPENCODE — El Agente de IA
+═══════════════════════════════════════════════════════════════════════════════
+
+1.1 ¿QUÉ ES OPENCODE?
+──────────────────────
+OpenCode es un agente de IA para coding que corre en terminal (TUI).
+No es un chatbot simple — es un AGENTE que puede:
+- Leer y entender codebases completas
+- Editar archivos
+- Ejecutar comandos bash
+- Delegar trabajo a sub-agentes
+- Usar memoria persistente (Engram)
+
+Modelo: Puede usar cualquier proveedor (Anthropic Claude, OpenAI, DeepSeek, etc.)
+Arquitectura: Client/Server — el TUI es el cliente, el backend procesa.
+
+
+1.2 HERRAMIENTAS BUILT-IN DE OPENCODE
+──────────────────────────────────────
+
+┌─────────────────┬─────────────────────────────────────────────────────────┐
+│ Herramienta     │ Qué hace                                                │
+├─────────────────┼─────────────────────────────────────────────────────────┤
+│ bash            │ Ejecuta comandos del terminal. Tiene permisos granulares│
+│                 │ (puede bloquear comandos peligrosos como rm -rf)        │
+├─────────────────┼─────────────────────────────────────────────────────────┤
+│ read            │ Lee contenido de archivos. Soporta rangos de líneas.    │
+│                 │ Ejemplo: read("file.py", offset=10, limit=20)          │
+├─────────────────┼─────────────────────────────────────────────────────────┤
+│ write           │ Sobrescribe un archivo completo. Crea nuevos archivos.  │
+│                 │ CUIDADO: borra todo el contenido anterior.              │
+├─────────────────┼─────────────────────────────────────────────────────────┤
+│ edit            │ Reemplazo exacto de strings. Busca oldString, reemplaza │
+│                 │ por newString. Más seguro que write para ediciones.     │
+├─────────────────┼─────────────────────────────────────────────────────────┤
+│ glob            │ Busca archivos por patrón. Ejemplo: "**/*.py"          │
+│                 │ Devuelve lista de paths que coinciden.                  │
+├─────────────────┼─────────────────────────────────────────────────────────┤
+│ grep            │ Busca contenido dentro de archivos usando regex.        │
+│                 │ Ejemplo: grep("def.*login", include="*.py")            │
+├─────────────────┼─────────────────────────────────────────────────────────┤
+│ task            │ Lanza un sub-agente para trabajar de forma autónoma.    │
+│                 │ El sub-agente tiene contexto fresco (sin memoria).      │
+├─────────────────┼─────────────────────────────────────────────────────────┤
+│ question        │ Pregunta al usuario. Bloquea hasta que responda.        │
+│                 │ Soporta opciones múltiples, selección única, etc.       │
+├─────────────────┼─────────────────────────────────────────────────────────┤
+│ todowrite       │ Crea y administra una lista de tareas.                  │
+│                 │ Estados: pending, in_progress, completed, cancelled.    │
+├─────────────────┼─────────────────────────────────────────────────────────┤
+│ webfetch        │ Descarga contenido de una URL. Convierte a markdown.    │
+├─────────────────┼─────────────────────────────────────────────────────────┤
+│ websearch       │ Busca en internet. Devuelve resultados relevantes.      │
+├─────────────────┼─────────────────────────────────────────────────────────┤
+│ lsp             │ Language Server Protocol — análisis de código estático. │
+│                 │ Type checking, autocompletado, errores de sintaxis.     │
+├─────────────────┼─────────────────────────────────────────────────────────┤
+│ skill           │ Carga un SKILL.md especializado para la tarea actual.  │
+│                 │ Skills = instrucciones predefinidas para patrones.      │
+└─────────────────┴─────────────────────────────────────────────────────────┘
+
+
+1.3 SUB-AGENTES DE OPENCODE
+────────────────────────────
+OpenCode puede delegar trabajo a sub-agentes especializados:
+
+┌─────────────────────┬───────────────────────────────────────────────────────┐
+│ Sub-agente          │ Qué hace                                              │
+├─────────────────────┼───────────────────────────────────────────────────────┤
+│ explore             │ Exploración read-only del codebase. Mapea archivos,   │
+│                     │ estructura, dependencias. Contexto fresco.            │
+├─────────────────────┼───────────────────────────────────────────────────────┤
+│ general             │ Tareas generales: ejecutar comandos, escribir código, │
+│                     │ implementar features.                                  │
+├─────────────────────┼───────────────────────────────────────────────────────┤
+│ sdd-explore         │ Investiga ideas antes de comprometerse con un cambio. │
+├─────────────────────┼───────────────────────────────────────────────────────┤
+│ sdd-propose         │ Crea propuestas de cambio con intención y alcance.    │
+├─────────────────────┼───────────────────────────────────────────────────────┤
+│ sdd-spec            │ Escribe especificaciones detalladas de requirements.  │
+├─────────────────────┼───────────────────────────────────────────────────────┤
+│ sdd-design          │ Crea diseño técnico y arquitectura.                   │
+├─────────────────────┼───────────────────────────────────────────────────────┤
+│ sdd-tasks           │ Divide el trabajo en tareas de implementación.        │
+├─────────────────────┼───────────────────────────────────────────────────────┤
+│ sdd-apply           │ Implementa código basado en specs y diseño.           │
+├─────────────────────┼───────────────────────────────────────────────────────┤
+│ sdd-verify          │ Valida que la implementación cumple specs.            │
+├─────────────────────┼───────────────────────────────────────────────────────┤
+│ sdd-archive         │ Cierra un cambio y persiste estado final.             │
+├─────────────────────┼───────────────────────────────────────────────────────┤
+│ sdd-init            │ Inicializa contexto SDD del proyecto.                 │
+├─────────────────────┼───────────────────────────────────────────────────────┤
+│ sdd-onboard         │ Walkthrough guiado del ciclo SDD completo.            │
+├─────────────────────┼───────────────────────────────────────────────────────┤
+│ sdd-research        │ Produce evidencia auditable para investigación SDD.   │
+├─────────────────────┼───────────────────────────────────────────────────────┤
+│ review-risk         │ Revisión adversarial: seguridad, permisos, riesgos.   │
+├─────────────────────┼───────────────────────────────────────────────────────┤
+│ review-readability  │ Revisión: naming, complejidad, mantenibilidad.         │
+├─────────────────────┼───────────────────────────────────────────────────────┤
+│ review-reliability  │ Revisión: tests, coverage, edge cases, contratos.     │
+├─────────────────────┼───────────────────────────────────────────────────────┤
+│ review-resilience   │ Revisión: fallbacks, retry, degradación graceful.     │
+├─────────────────────┼───────────────────────────────────────────────────────┤
+│ review-refuter      │ Refutación adversarial de findings de revisión.       │
+├─────────────────────┼───────────────────────────────────────────────────────┤
+│ review-validator    │ Validador read-only de checks del proveedor.          │
+├─────────────────────┼───────────────────────────────────────────────────────┤
+│ jd-judge-a          │ Juez A para protocolo judgment-day (dual review).     │
+├─────────────────────┼───────────────────────────────────────────────────────┤
+│ jd-judge-b          │ Juez B para protocolo judgment-day.                   │
+├─────────────────────┼───────────────────────────────────────────────────────┤
+│ jd-fix-agent        │ Agente de fixes quirúrgicos post-judgment.            │
+└─────────────────────┴───────────────────────────────────────────────────────┘
+
+
+1.4 CÓMO FUNCIONA EL CONTEXTO EN OPENCODE
+──────────────────────────────────────────
+
+MODO API (SDK/Programático):
+  ┌─────────────────────────────────────────────────────────────────┐
+  │ Cliente (app web, plugin, script)                               │
+  │   │                                                             │
+  │   │ POST /session.create                                         │
+  │   │ POST /session.prompt { model, parts: [{type:"text", text}] }│
+  │   │                                                             │
+  │   ▼                                                             │
+  │ OpenCode Server                                                  │
+  │   │                                                             │
+  │   │ 1. Crea sesión con ID único                                  │
+  │   │ 2. Carga instrucciones del sistema (AGENTS.md, skills)       │
+  │   │ 3. Agrega mensaje del usuario al historial                   │
+  │   │ 4. Envía TODO el historial + tools al modelo LLM             │
+  │   │ 5. Modelo responde con texto O tool_call                     │
+  │   │ 6. Si tool_call → ejecuta herramienta → agrega resultado     │
+  │   │    → vuelve a enviar al modelo (loop hasta que responda texto)│
+  │   │ 7. Devuelve respuesta final al cliente                       │
+  │   ▼                                                             │
+  │ Respuesta: { choices: [{ message: { content: "..." } }] }       │
+  └─────────────────────────────────────────────────────────────────┘
+
+MODO CHAT (TUI/Terminal):
+  ┌─────────────────────────────────────────────────────────────────┐
+  │ Terminal OpenCode (TUI)                                          │
+  │   │                                                             │
+  │   │ 1. Muestra prompt al usuario                                 │
+  │   │ 2. Usuario escribe mensaje (puede incluir @archivo)          │
+  │   │ 3. OpenCode carga contexto:                                  │
+  │   │    - Instrucciones del sistema (AGENTS.md)                   │
+  │   │    - Skills relevantes (SKILL.md)                            │
+  │   │    - Archivos referenciados con @                            │
+  │   │    - Historial de la sesión                                  │
+  │   │    - Memoria persistente (Engram)                            │
+  │   │ 4. Envía todo al modelo LLM                                  │
+  │   │ 5. Modelo responde → tool_calls → ejecuta → loop             │
+  │   │ 6. Muestra resultado en terminal                             │
+  │   ▼                                                             │
+  │ El usuario ve: respuesta + acciones realizadas                   │
+  └─────────────────────────────────────────────────────────────────┘
+
+REFERENCIAS CON @:
+  El usuario puede incluir archivos con @:
+    "¿Cómo funciona auth en @src/auth.ts?"
+    "Compara esto con @docs/README.md"
+  OpenCode lee el contenido del archivo y lo agrega al contexto.
+
+
+1.5 CÓMO OPENCODE SABE QUE LAS HERRAMIENTAS DAN ERROR
+──────────────────────────────────────────────────────
+
+Cada tool_call devuelve un resultado estructurado:
+
+  ┌─────────────────────────────────────────────────────────────────┐
+  │ Tool Call: bash("rm -rf /")                                     │
+  │                                                                 │
+  │ Resultado: {                                                    │
+  │   "isError": true,                                              │
+  │   "content": "bash: permission denied / command not found"       │
+  │ }                                                               │
+  │                                                                 │
+  │ → OpenCode detecta isError=true                                  │
+  │ → Agrega el error al contexto                                   │
+  │ → El modelo LLM VE el error y decide qué hacer:                 │
+  │   - Reintentar con otro comando                                 │
+  │   - Explicar el error al usuario                                │
+  │   - Intentar una alternativa                                    │
+  └─────────────────────────────────────────────────────────────────┘
+
+Tipos de error que OpenCode maneja:
+  1. Errores de herramienta (command failed, file not found)
+  2. Errores de permiso (permission denied, access denied)
+  3. Errores de validación (invalid JSON, missing required field)
+  4. Errores de red (timeout, connection refused)
+  5. Errores del modelo (rate limit, context too long)
+
+El modelo LLM SIEMPRE ve los errores y puede decidir reintentar o.reportar.
+
+
+1.6 THINKING EN OPENCODE
+─────────────────────────
+
+"Thinking" es un modo donde el modelo LLM "razona" antes de responder.
+
+Cómo funciona:
+  ┌─────────────────────────────────────────────────────────────────┐
+  │ 1. Usuario envía mensaje                                        │
+  │ 2. OpenCode envía al modelo con thinking habilitado             │
+  │ 3. El modelo genera un BLOQUE DE PENSAMIENTO oculto:            │
+  │                                                                 │
+  │    <thinking>                                                   │
+  │    Voy a analizar este código...                                 │
+  │    veo que hay un bug en la línea 42...                          │
+  │    la solución es cambiar X por Y...                             │
+  │    </thinking>                                                   │
+  │                                                                 │
+  │ 4. Luego genera la respuesta visible:                           │
+  │    "Encontré un bug en la línea 42. La solución es..."          │
+  │                                                                 │
+  │ 5. OpenCode puede mostrar u ocultar el bloque <thinking>        │
+  └─────────────────────────────────────────────────────────────────┘
+
+Comando: /thinking (toggle en TUI)
+  - Solo controla VISIBILIDAD del bloque de reasoning
+  - NO habilita/deshabilita el reasoning del modelo
+  - Algunos modelos lo soportan (Claude, DeepSeek-R1), otros no
+
+Modelos con thinking:
+  - Claude 3.5 Sonnet: thinking habilitado por defecto
+  - DeepSeek-R1: thinking nativo (reasoning model)
+  - DeepSeek-Chat: thinking DESHABILITADO (no lo soporta)
+  - GPT-4o: sin thinking nativo
+
+Configuración en opencode.json:
+  {
+    "model": "anthropic/claude-sonnet-4-5",  // modelo principal
+    "small_model": "anthropic/claude-haiku-4-5"  // modelo rápido
+  }
+
+
+1.7 TOOL CALLING EN OPENCODE
+─────────────────────────────
+
+El modelo LLM no solo responde texto — puede llamar herramientas.
+
+Flujo de Tool Calling:
+  ┌─────────────────────────────────────────────────────────────────┐
+  │                                                                 │
+  │  Usuario: "Borra el archivo test.py"                            │
+  │                                                                 │
+  │  OpenCode envía al LLM:                                         │
+  │  ┌─────────────────────────────────────────────────────────┐    │
+  │  │ System: [instrucciones + tools disponibles]              │    │
+  │  │ User: "Borra el archivo test.py"                         │    │
+  │  └─────────────────────────────────────────────────────────┘    │
+  │                                                                 │
+  │  LLM responde:                                                  │
+  │  ┌─────────────────────────────────────────────────────────┐    │
+  │  │ {                                                       │    │
+  │  │   "tool_calls": [{                                       │    │
+  │  │     "function": "bash",                                  │    │
+  │  │     "arguments": { "command": "rm test.py" }             │    │
+  │  │   }]                                                     │    │
+  │  │ }                                                       │    │
+  │  └─────────────────────────────────────────────────────────┘    │
+  │                                                                 │
+  │  OpenCode ejecuta: bash("rm test.py")                           │
+  │  Resultado: { success: true }                                    │
+  │                                                                 │
+  │  OpenCode envía resultado al LLM:                               │
+  │  ┌─────────────────────────────────────────────────────────┐    │
+  │  │ Tool: { "success": true }                                │    │
+  │  └─────────────────────────────────────────────────────────┘    │
+  │                                                                 │
+  │  LLM responde: "Listo, borré test.py"                           │
+  │                                                                 │
+  └─────────────────────────────────────────────────────────────────┘
+
+Formato del request al LLM (estilo OpenAI):
+  {
+    "model": "claude-sonnet-4-5",
+    "messages": [
+      { "role": "system", "content": "Eres un asistente..." },
+      { "role": "user", "content": "Borra test.py" }
+    ],
+    "tools": [
+      {
+        "type": "function",
+        "function": {
+          "name": "bash",
+          "description": "Ejecuta comandos del terminal",
+          "parameters": {
+            "type": "object",
+            "properties": {
+              "command": { "type": "string", "description": "Comando a ejecutar" }
+            },
+            "required": ["command"]
+          }
+        }
+      }
+    ]
+  }
+
+Formato de la respuesta del LLM:
+  {
+    "choices": [{
+      "message": {
+        "role": "assistant",
+        "tool_calls": [{
+          "id": "call_abc123",
+          "type": "function",
+          "function": {
+            "name": "bash",
+            "arguments": "{\"command\":\"rm test.py\"}"
+          }
+        }]
+      }
+    }]
+  }
+
+
+1.8 ENTRADA DEL USUARIO: TEXTO vs IMAGEN
+─────────────────────────────────────────
+
+TEXTO:
+  - Input directo del usuario en el TUI o API
+  - Se envía como: { "type": "text", "text": "tu mensaje" }
+  - Puede incluir @referencias a archivos
+
+IMAGEN:
+  - OpenCode soporta entrada multimodal (texto + imagen)
+  - Configuración en opencode.json:
+    {
+      "attachment": {
+        "image": {
+          "auto_resize": true,      // Redimensiona automáticamente
+          "max_width": 2000,        // Ancho máximo en píxeles
+          "max_height": 2000,       // Alto máximo en píxeles
+          "max_base64_bytes": 5242880  // 5MB máximo
+        }
+      }
+    }
+
+  - Formato de envío:
+    {
+      "parts": [
+        { "type": "text", "text": "¿Qué hay en esta imagen?" },
+        { "type": "image", "image": { "base64": "..." } }
+      ]
+    }
+
+  - El modelo LLM (si soporta visión) puede:
+    - Leer texto en capturas de pantalla
+    - Entender diagramas de arquitectura
+    - Analizar UI/UX
+    - Detectar bugs visuales
+
+
+═══════════════════════════════════════════════════════════════════════════════
+  PARTE 2: GENTLE AI — La Capa de Orquestación
+═══════════════════════════════════════════════════════════════════════════════
+
+2.1 ¿QUÉ ES GENTLE AI?
+───────────────────────
+Gentle AI es un SISTEMA DE ORQUESTACIÓN que se encima de OpenCode.
+No es un modelo LLM — es un conjunto de:
+- Instrucciones del sistema (AGENTS.md)
+- Skills (SKILL.md especializados)
+- Protocolos (SDD, review, defect workflow)
+- Memoria persistente (Engram)
+
+Propósito: Hacer que OpenCode trabaje de forma más estructurada,
+con quality gates, review cycles, y documentation-first.
+
+
+2.2 HERRAMIENTAS DE GENTLE AI
+──────────────────────────────
+
+Gentle AI NO tiene herramientas propias — usa las de OpenCode.
+Pero AGREGA capas de comportamiento:
+
+┌─────────────────────┬───────────────────────────────────────────────────────┐
+│ Capa                │ Qué hace                                              │
+├─────────────────────┼───────────────────────────────────────────────────────┤
+│ SDD Workflow        │ Spec-Driven Development: proposal → spec → design →  │
+│                     │ tasks → apply → verify → archive. Cada fase tiene     │
+│                     │ sub-agentes dedicados y gates de calidad.             │
+├─────────────────────┼───────────────────────────────────────────────────────┤
+│ Review System       │ Revisión dual adversarial (judgment-day). 4 lenses:  │
+│                     │ risk, resilience, readability, reliability.           │
+├─────────────────────┼───────────────────────────────────────────────────────┤
+│ Engram Protocol     │ Memoria persistente: guarda decisiones, bugs,        │
+│                     │ convenciones entre sesiones. Búsqueda semántica.      │
+├─────────────────────┼───────────────────────────────────────────────────────┤
+│ Skill System        │ 20+ skills especializados que se cargan según la     │
+│                     │ tarea (branch-pr, chained-pr, go-testing, etc.)      │
+├─────────────────────┼───────────────────────────────────────────────────────┤
+│ Delegation Rules    │ Reglas de cuándo delegar vs hacer inline.            │
+│                     │ "4-file rule": 4+ archivos → delegar exploración.     │
+├─────────────────────┼───────────────────────────────────────────────────────┤
+│ Gatekeeper          │ Validación automática entre fases SDD.               │
+│                     │ Detecta: status mismatch, missing artifacts, drift.   │
+├─────────────────────┼───────────────────────────────────────────────────────┤
+│ Lossless Blocking   │ Cuando necesita input del usuario, preserva el       │
+│                     │ envelope completo de opciones sin resumir.            │
+└─────────────────────┴───────────────────────────────────────────────────────┘
+
+
+2.3 SUB-AGENTES DE GENTLE AI
+─────────────────────────────
+Gentle AI hereda TODOS los sub-agentes de OpenCode + agrega:
+
+  - sdd-explore, sdd-propose, sdd-spec, sdd-design, sdd-tasks
+  - sdd-apply, sdd-verify, sdd-archive, sdd-init, sdd-onboard
+  - sdd-research
+  - review-risk, review-readability, review-reliability, review-resilience
+  - review-refuter, review-validator
+  - jd-judge-a, jd-judge-b, jd-fix-agent
+
+Cada sub-agente recibe:
+  - Contexto fresco (sin memoria previa)
+  - Instrucciones específicas del rol
+  - Skills relevantes inyectados
+  - Artifact references (no el contenido completo)
+
+
+2.4 TOOL CALLING EN GENTLE AI
+──────────────────────────────
+Gentle AI usa el MISMO tool calling que OpenCode.
+La diferencia es que Gentle AI tiene reglas sobre CUÁNDO usar cada tool:
+
+  - "read 1-3 archivos" → hacerlo inline
+  - "read 4+ archivos" → delegar a explore sub-agent
+  - "write 1 file simple" → inline
+  - "write 2+ files" → delegar a writer sub-agent
+  - "bash para git" → inline
+  - "tests/builds" → fresh worker por acción
+
+
+═══════════════════════════════════════════════════════════════════════════════
+  PARTE 3: CARLOS CODE (C3) — El Orquestador
+═══════════════════════════════════════════════════════════════════════════════
+
+3.1 ¿QUÉ ES CARLOS CODE?
+─────────────────────────
+C3 es un servicio Go que actúa como ORQUESTADOR de tareas.
+No es un agente OpenCode — es un servicio HTTP que:
+- Recibe pedidos de planificación
+- Consulta workers disponibles (de C1)
+- Pide planes a DeepSeek (vía C2 Gateway)
+- Distribuye trabajo a workers (C6)
+
+
+3.2 HERRAMIENTAS DE C3 (Carlos Code)
+──────────────────────────────────────
+
+┌─────────────────┬─────────────────────────────────────────────────────────┐
+│ Endpoint        │ Qué hace                                                │
+├─────────────────┼─────────────────────────────────────────────────────────┤
+│ GET /health     │ Health check. Devuelve status, config, timestamp.       │
+├─────────────────┼─────────────────────────────────────────────────────────┤
+│ GET /metrics    │ RAM usage, uptime, goroutines. Para monitoreo.          │
+├─────────────────┼─────────────────────────────────────────────────────────┤
+│ POST /plan      │ Recibe prompt + workers. Pide plan a DeepSeek.          │
+│                 │ Devuelve: { mode, note, assignments }.                   │
+├─────────────────┼─────────────────────────────────────────────────────────┤
+│ GET /tools      │ Lista herramientas disponibles (glob, grep, read,       │
+│                 │ edit, write, bash, git_*).                               │
+├─────────────────┼─────────────────────────────────────────────────────────┤
+│ POST /update    │ Actualiza archivos en GitHub (vía API REST).             │
+├─────────────────┼─────────────────────────────────────────────────────────┤
+│ POST /finalize  │ Finaliza una tarea y reporta resultado.                 │
+├─────────────────┼─────────────────────────────────────────────────────────┤
+│ POST /git       │ Operaciones Git (status, list, read, commit, delete).   │
+└─────────────────┴─────────────────────────────────────────────────────────┘
+
+Herramientas internas de C3 (no son endpoints, son funciones Go):
+  - glob(pattern)    → busca archivos por patrón
+  - grep(pattern)    → busca contenido en archivos
+  - read(path)       → lee archivo
+  - edit(path,o,n)   → reemplaza strings
+  - write(path,c)    → escribe archivo
+  - bash(cmd)        → ejecuta comando
+  - git_status()     → info del repo en GitHub
+  - git_list(path)   → lista archivos en GitHub
+  - git_read(path)   → lee archivo de GitHub
+  - git_commit()     → crea/actualiza archivo en GitHub
+  - git_delete()     → borra archivo de GitHub
+  - git_commits()    → lista commits recientes
+
+
+3.3 CÓMO C3 USA DEEPSEEK
+──────────────────────────
+
+C3 llama a DeepSeek a través de C2 Gateway:
+
+  ┌─────────────────────────────────────────────────────────────────┐
+  │ C3 → C2 Gateway: POST /v1/chat/completions                     │
+  │ {                                                               │
+  │   "model": "deepseek-chat",                                    │
+  │   "messages": [{ "role": "user", "content": "<prompt>" }],     │
+  │   "stream": false                                               │
+  │ }                                                               │
+  │                                                                 │
+  │ C2 Gateway → DeepSeek API:                                      │
+  │ POST https://chat.deepseek.com/api/v0/chat/completion           │
+  │ {                                                               │
+  │   "chat_session_id": "uuid",                                    │
+  │   "prompt": "Eres un orquestador...",                           │
+  │   "thinking_enabled": false,  ← deepseek-chat NO tiene thinking │
+  │   "search_enabled": true                                        │
+  │ }                                                               │
+  │                                                                 │
+  │ DeepSeek → C2 → C3:                                             │
+  │ {                                                               │
+  │   "choices": [{ "message": { "content": "{\"mode\":\"percent\"...}" }}]
+  │ }                                                               │
+  └─────────────────────────────────────────────────────────────────┘
+
+
+3.4 FLUJO COMPLETO DE C3
+─────────────────────────
+
+  1. Recibe: POST /plan { prompt, workers }
+  2. Si no hay workers → consulta C1: GET /api/workers
+  3. Carga skills del proyecto (si existen)
+  4. Carga memoria de Engram
+  5. Construye prompt para DeepSeek
+  6. Envía a C2 Gateway → DeepSeek
+  7. Parsea respuesta JSON
+  8. Devuelve: { mode, note, assignments }
+
+
+═══════════════════════════════════════════════════════════════════════════════
+  PARTE 4: WORKER CODE (C6) — El Implementador
+═══════════════════════════════════════════════════════════════════════════════
+
+4.1 ¿QUÉ ES C6?
+───────────────
+C6 es un worker mínimo que IMPLEMENTA archivos.
+No planifica, no coordina — solo ejecuta:
+  - Recibe: task_id + file + prompt
+  - Lee el archivo actual
+  - Pide a DeepSeek que genere el contenido
+  - Escribe el archivo
+  - Reporta resultado a C1
+
+
+4.2 HERRAMIENTAS DE C6
+───────────────────────
+
+C6 NO tiene endpoints HTTP para herramientas.
+Sus "herramientas" son funciones Go internas:
+
+┌─────────────────────┬───────────────────────────────────────────────────────┐
+│ Función             │ Qué hace                                              │
+├─────────────────────┼───────────────────────────────────────────────────────┤
+│ os.ReadFile(path)   │ Lee el archivo objetivo del proyecto.                 │
+├─────────────────────┼───────────────────────────────────────────────────────┤
+│ os.WriteFile(path)  │ Escribe el contenido generado en el archivo.          │
+├─────────────────────┼───────────────────────────────────────────────────────┤
+│ generateContent()   │ Llama a DeepSeek (vía C2) para generar contenido.    │
+│                     │ Model: "deepseek-chat"                                │
+├─────────────────────┼───────────────────────────────────────────────────────┤
+│ safePath()          │ Valida que la ruta esté dentro de PROJECT_PATH.       │
+│                     │ Seguridad: no permite path traversal.                 │
+└─────────────────────┴───────────────────────────────────────────────────────┘
+
+
+4.3 CÓMO C6 USA DEEPSEEK
+──────────────────────────
+
+  ┌─────────────────────────────────────────────────────────────────┐
+  │ C6 → C2 Gateway: POST /v1/chat/completions                     │
+  │ {                                                               │
+  │   "model": "deepseek-chat",                                    │
+  │   "messages": [{                                                │
+  │     "role": "user",                                             │
+  │     "content": "Eres un agente de implementación mínimo.        │
+  │       Modificá SOLO el archivo indicado.                        │
+  │       TAREA GLOBAL: Pon los números 1, 3, 4                     │
+  │       ARCHIVO A IMPLEMENTAR: documento.txt                      │
+  │       CONTENIDO ACTUAL: (contenido del archivo)                 │
+  │       Devolvé EXCLUSIVAMENTE el contenido COMPLETO."            │
+  │   }],                                                           │
+  │   "stream": false                                               │
+  │ }                                                               │
+  │                                                                 │
+  │ DeepSeek responde con el contenido completo del archivo.        │
+  │ C6 lo escribe directamente (sin tool calling intermedio).       │
+  └─────────────────────────────────────────────────────────────────┘
+
+
+4.4 DIFERENCIA C3 vs C6
+────────────────────────
+
+  ┌─────────────────────┬─────────────────────────────────────────────────┐
+  │ Aspecto             │ C3 (Carlos Code)      │ C6 (Worker)             │
+  ├─────────────────────┼───────────────────────┼─────────────────────────┤
+  │ Rol                 │ Orquestador           │ Implementador           │
+  │ Modelo              │ deepseek-chat         │ deepseek-chat           │
+  │ Tools visibles      │ 12 (glob,grep,etc)    │ 0 (solo read/write)     │
+  │ Tool calling        │ Sí (model lo usa)     │ No (prompt directo)     │
+  │ Thinking            │ No (deepseek-chat)    │ No (deepseek-chat)      │
+  │ Recibe de           │ C1 o usuario          │ C1                      │
+  │ Devuelve            │ Plan (assignments)    │ Archivo modificado      │
+  │ Conecta a           │ C2 Gateway            │ C2 Gateway              │
+  │ Memoria             │ Sí (Engram)           │ No                      │
+  │ GitHub API          │ Sí (git_* tools)      │ No                      │
+  └─────────────────────┴───────────────────────┴─────────────────────────┘
+
+
+═══════════════════════════════════════════════════════════════════════════════
+  PARTE 5: COMPARACIÓN DE TOOL CALLING
+═══════════════════════════════════════════════════════════════════════════════
+
+5.1 OPENCODE vs GENTLE AI vs C3 vs C6
+──────────────────────────────────────
+
+  ┌─────────────┬──────────────┬──────────────┬──────────────┬──────────────┐
+  │ Aspecto     │ OpenCode     │ Gentle AI    │ C3           │ C6           │
+  ├─────────────┼──────────────┼──────────────┼──────────────┼──────────────┤
+  │ Tipo        │ Agente TUI   │ Orchestration│ Servicio HTTP│ Worker       │
+  │ LLM         │ Cualquiera   │ Cualquiera   │ DeepSeek     │ DeepSeek     │
+  │ Tools       │ 12+ built-in │ Misma + SDD  │ 12 propias   │ 0 (interno)  │
+  │ Sub-agents  │ 20+          │ Misma + SDD  │ Ninguno      │ Ninguno      │
+  │ Tool calling│ Nativo LLM   │ Nativo LLM   │ Prompt-based │ Prompt-based │
+  │ Thinking    │ Sí (si LLM)  │ Sí (si LLM)  │ No           │ No           │
+  │ Error aware │ Sí (isError) │ Sí           │ Parsea JSON  │ Parsea HTTP  │
+  │ Images      │ Sí (visión)  │ Sí (visión)  │ No           │ No           │
+  │ Contexto    │ Sesión+mem   │ Sesión+mem   │ Request JSON │ Request JSON │
+  │ Memoria     │ Engram       │ Engram       │ Engram       │ No           │
+  └─────────────┴──────────────┴──────────────┴──────────────┴──────────────┘
+
+
+5.2 FORMATO REAL DE TOOL CALLING
+─────────────────────────────────
+
+OpenCode/Gentle AI (estilo OpenAI):
+  Request:
+  {
+    "model": "claude-sonnet-4-5",
+    "messages": [
+      { "role": "system", "content": "Eres un asistente..." },
+      { "role": "user", "content": "Crea test.py" },
+      { "role": "assistant", "content": null, "tool_calls": [
+        { "id": "call_1", "type": "function", "function": {
+          "name": "write",
+          "arguments": "{\"content\":\"print('hello')\",\"filePath\":\"test.py\"}"
+        }}
+      ]},
+      { "role": "tool", "tool_call_id": "call_1", "content": "File written" }
+    ],
+    "tools": [
+      { "type": "function", "function": {
+        "name": "write",
+        "description": "Write a file",
+        "parameters": { "type": "object", "properties": {
+          "content": { "type": "string" },
+          "filePath": { "type": "string" }
+        }}
+      }}
+    ]
+  }
+
+  Response:
+  {
+    "choices": [{
+      "message": {
+        "role": "assistant",
+        "content": null,
+        "tool_calls": [{
+          "id": "call_1",
+          "type": "function",
+          "function": {
+            "name": "write",
+            "arguments": "{\"content\":\"print('hello')\",\"filePath\":\"test.py\"}"
+          }
+        }]
+      },
+      "finish_reason": "tool_calls"
+    }]
+  }
+
+C3/C6 (prompt directo, sin tool calling nativo):
+  Request a DeepSeek:
+  {
+    "model": "deepseek-chat",
+    "messages": [{ "role": "user", "content": "Eres un orquestador...\nTAREA: crear test.py\nWORKERS: [worker-code]" }],
+    "stream": false
+  }
+
+  Response de DeepSeek:
+  {
+    "choices": [{
+      "message": {
+        "role": "assistant",
+        "content": "{\"mode\":\"percent\",\"assignments\":{\"worker-code\":[\"test.py\"]}}"
+      }
+    }]
+  }
+
+
+═══════════════════════════════════════════════════════════════════════════════
+  PARTE 6: FLUJO DE USUARIO COMPLETO
+═══════════════════════════════════════════════════════════════════════════════
+
+6.1 FLUJO: Usuario → OpenCode → API
+────────────────────────────────────
+
+  ┌─────────────────────────────────────────────────────────────────┐
+  │ 1. Usuario escribe en TUI: "Analiza auth.ts"                    │
+  │                                                                 │
+  │ 2. OpenCode crea request:                                        │
+  │    POST /api/session/{id}/prompt                                 │
+  │    { parts: [{ type:"text", text:"Analiza auth.ts" }] }         │
+  │                                                                 │
+  │ 3. OpenCode server carga contexto:                               │
+  │    - System prompt (AGENTS.md)                                   │
+  │    - Skills relevantes                                           │
+  │    - Historial de sesión                                         │
+  │    - Memoria Engram                                              │
+  │                                                                 │
+  │ 4. Envía a LLM provider:                                        │
+  │    POST https://api.anthropic.com/v1/messages                    │
+  │    { model, messages, tools }                                    │
+  │                                                                 │
+  │ 5. LLM responde con tool_call:                                   │
+  │    { tool_calls: [{ name:"read", args:{filePath:"auth.ts"} }] } │
+  │                                                                 │
+  │ 6. OpenCode ejecuta read("auth.ts") → contenido del archivo     │
+  │                                                                 │
+  │ 7. OpenCode envía resultado al LLM:                              │
+  │    { role:"tool", content:"contenido de auth.ts" }               │
+  │                                                                 │
+  │ 8. LLM analiza y responde:                                       │
+  │    "auth.ts usa JWT con refresh tokens..."                       │
+  │                                                                 │
+  │ 9. OpenCode muestra respuesta en TUI                             │
+  └─────────────────────────────────────────────────────────────────┘
+
+
+6.2 FLUJO: Usuario → C1 Panel → C3 → C6
+─────────────────────────────────────────
+
+  ┌─────────────────────────────────────────────────────────────────┐
+  │ 1. Usuario envía tarea desde C1 Panel:                          │
+  │    POST /api/task { prompt, leader:"auto", workers:["worker-code"] }
+  │                                                                 │
+  │ 2. C1 ve leader="auto" → llama a C3:                            │
+  │    POST https://carlos-code.onrender.com/plan                   │
+  │    { prompt:"Crear documento.txt", workers:["worker-code"] }    │
+  │                                                                 │
+  │ 3. C3 pide plan a DeepSeek (vía C2):                            │
+  │    POST https://carlos-gateway.onrender.com/v1/chat/completions │
+  │    { model:"deepseek-chat", messages:[...] }                    │
+  │                                                                 │
+  │ 4. DeepSeek responde con plan:                                   │
+  │    { assignments: { "worker-code": ["documento.txt"] } }         │
+  │                                                                 │
+  │ 5. C3 devuelve plan a C1:                                        │
+  │    { mode:"percent", assignments:{...} }                         │
+  │                                                                 │
+  │ 6. C1 despacha a C6:                                             │
+  │    POST /api/worker-action?token=X&id=worker-code                │
+  │    { tipo:"tarea", task_id:"...", file:"documento.txt",          │
+  │      prompt:"Pon los números 1, 3, 4" }                         │
+  │                                                                 │
+  │ 7. C6 lee archivo, pide contenido a DeepSeek (vía C2):          │
+  │    POST https://carlos-gateway.onrender.com/v1/chat/completions │
+  │    { model:"deepseek-chat", messages:[...] }                    │
+  │                                                                 │
+  │ 8. DeepSeek devuelve contenido: "1\n3\n4"                       │
+  │                                                                 │
+  │ 9. C6 escribe documento.txt                                     │
+  │                                                                 │
+  │ 10. C6 reporta a C1:                                             │
+  │     POST /api/worker-action?token=X&id=worker-code               │
+  │     { tipo:"resultado", status:"done" }                          │
+  │                                                                 │
+  │ 11. C1 muestra resultado al usuario                              │
+  └─────────────────────────────────────────────────────────────────┘
+
+
+═══════════════════════════════════════════════════════════════════════════════
+  PARTE 7: RESUMEN RÁPIDO
+═══════════════════════════════════════════════════════════════════════════════
+
+OPENCODE:
+  - Agente TUI con 12+ herramientas built-in
+  - Tool calling nativo (LLM decide qué tool usar)
+  - Thinking: modo reasoning oculto del modelo
+  - Contexto: sesión + historial + memoria + skills
+  - Errores: isError flag, LLM los ve y decide
+  - Imágenes: soporte multimodal (configurable)
+
+GENTLE AI:
+  - Capa de orquestación sobre OpenCode
+  - SDD: workflow de specs y diseño
+  - Review: dual adversarial con 4 lenses
+  - Engram: memoria persistente
+  - Skills: 20+ instrucciones especializadas
+  - Reglas de delegación (4-file rule, etc.)
+
+CARLOS CODE (C3):
+  - Servicio Go de orquestación
+  - 12 herramientas propias (glob, grep, git_*, etc.)
+  - Consulta workers a C1
+  - Pide planes a DeepSeek via C2
+  - NO tiene thinking (deepseek-chat)
+  - NO tiene tool calling nativo (usa prompt)
+
+WORKER CODE (C6):
+  - Worker mínimo de implementación
+  - 0 herramientas visibles (solo read/write internos)
+  - Pide contenido a DeepSeek via C2
+  - NO tiene thinking
+  - NO tiene tool calling nativo
+  - NO tiene memoria
+
+COMUNICACIÓN:
+  - C3 → C2 → DeepSeek (plan)
+  - C6 → C2 → DeepSeek (contenido)
+  - C1 → C3 (plan request)
+  - C1 → C6 (tarea)
+  - C6 → C1 (resultado)
+
+═══════════════════════════════════════════════════════════════════════════════
+
+1.9 THINKING Y TOOL CALLING PROFUNDO
+=====================================================================
+
+1.9.1 Qué es el "Thinking" en los modelos LLM
+---------------------------------------------------------------------
+"Thinking" (razonamiento) es un modo donde el modelo LLM genera un bloque
+de pensamiento oculto antes de dar la respuesta final. No todos los modelos
+lo soportan, y OpenCode lo controla como opción de visibilidad, no como
+habilitación/deshabilitación del razonamiento del modelo.
+
+Cómo funciona:
+  ┌─────────────────────────────────────────────────────────────────┐
+  │ 1. Usuario envía mensaje                                        │
+  │ 2. OpenCode envía al modelo con thinking habilitado (si el       │
+    modelo lo soporta)                                           │
+  │ 3. El modelo genera un BLOQUE DE PENSAMIENTO oculto:             │
+  │                                                                 │
+  │                                                                 │
+  │    <thinking>                                                   │
+  │    Voy a analizar este código...                                 │
+  │    veo que hay un bug en la línea 42...                          │
+  │    la solución es cambiar X por Y...                             │
+  │    </thinking>                                                   │
+  │                                                                 │
+  │ 4. Luego genera la respuesta visible:                           │
+  │    "Encontré un bug en la línea 42. La solución es..."          │
+  │                                                                 │
+  │ 5. OpenCode puede mostrar u ocultar el bloque <thinking>         │
+  │     usando el comando /thinking en el TUI (solo cambia visibilidad│
+  │     del bloque, no habilita/deshabilita el razonamiento del       │
+  │     modelo)                                                     │
+  └─────────────────────────────────────────────────────────────────┘
+
+Modelos con thinking nativo/habilitado:
+  - Claude 3.5 Sonnet: thinking habilitado por defecto (bloques <thinking>)
+  - DeepSeek-R1: thinking nativo (es un modelo de razonamiento puros)
+  - DeepSeek-Chat: thinking DESHABILITADO (no soporta bloques <thinking>)
+  - GPT-4o: sin thinking nativo (puede simularlo en el texto)
+  - Mimo-v2.5-free (OpenCode): depende del proveedor subyacente
+
+Configuración en opencode.json:
+  {
+    "model": "anthropic/claude-sonnet-4-5",   // modelo principal
+    "small_model": "anthropic/claude-haiku-4-5", // modelo rápido
+    "thinking": {
+      "enabled": true,     // si el modelo lo soporta
+      "show_blocks": true  // si mostramos los bloques <thinking> en el TUI
+    }
+  }
+
+1.9.2 Tool Calling Thinking en OpenCode
+---------------------------------------------------------------------
+El "tool calling thinking" combina el razonamiento del modelo con la
+utilización de herramientas. El modelo no solo decide QUÉ hacer, sino
+CUÁL HERRAMIENTA usar y CON QUÉ ARGUMENTOS.
+
+Flujo completo de tool calling thinking:
+  ┌─────────────────────────────────────────────────────────────────┐
+  │                                                                 │
+  │ 1. Usuario: "Orquestar los workers C3 para el plan X"           │
+  │                                                                 │
+  │ 2. OpenCode construye el request al LLM:                        │
+  │  ┌─────────────────────────────────────────────────────────┐    │
+  │  │ System: "Eres un orquestador..." + tools list           │    │
+  │  │ User: "Orquestar los workers C3 para el plan X"         │    │
+  │  │ Tools: [bash, write, read, task, ...]                    │    │
+  │  └─────────────────────────────────────────────────────────┘    │
+  │                                                                 │
+  │ 3. LLM responde con PENSAMIENTO + TOOL CALL:                    │
+  │  ┌─────────────────────────────────────────────────────────┐    │
+  │  │ <thinking>                                              │    │
+  │  │ Voy a verificar qué workers están disponibles first,    │    │
+  │  │ luego revisar el estado actual de cada uno.              │    │
+  │  │ </thinking>                                             │    │
+  │  │                                                         │    │
+  │  │ { "tool_calls": [                                      │    │
+  │  │   { "function": "bash", "arguments": { ... } }          │    │
+  │  │ ] }                                                     │    │
+  │  └─────────────────────────────────────────────────────────┘    │
+  │                                                                 │
+  │ 4. OpenCode ejecuta la herramienta                            │
+  │ 5. Resultado (éxito o error) se devuelve al LLM                 │
+  │ 6. LLM genera la respuesta final basándose en el resultado      │
+  └─────────────────────────────────────────────────────────────────┘
+
+1.9.3 Tool Calling Thinking en Gentle AI
+---------------------------------------------------------------------
+Gentle AI usa el MISMO mecanismo de tool calling thinking que OpenCode.
+La diferencia es que Gentle AI tiene REGLAZAS sobre CUÁNDO usar cada
+herramienta, basándose en el "Dependency Graph" y las reglas de
+delegación:
+
+Reglas de cuándo usar tool calling:
+  - "read 1-3 archivos"                    → Hacer inline (directo)
+  - "read 4+ archivos"                     → Delegar a explore sub-agent
+  - "write 1 archivo simple"               → Hacer inline
+  - "write 2+ archivos no triviales"       → Delegar a writer sub-agent
+  - "bash para comandos simples"           → Hacer inline
+  - "bash para operaciones state (git)"    → Hacer inline
+  - "tests, builds, installs"              → Worker fresco por acción
+  - "review, validación"                   → Sub-agente dedicado (review-*)
+  - "SDD phases (propose, spec, design)"   → Fase dedicada SDD
+
+El tool calling thinking en Gentle AI es "lossless": cada elección de
+herramienta se presenta completa al usuario mediante el protocolo de
+"Lossless Blocking Prompts", nunca se resumen ni se omiten opciones.
+
+=====================================================================

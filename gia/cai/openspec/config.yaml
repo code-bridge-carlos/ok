@@ -1,0 +1,90 @@
+schema: spec-driven
+
+context: |
+  Tech stack: Multi-language distributed "Carlos AI" system. Go services
+    (Gateway C2, Carlos Code C3, worker-code C6, browser_service), Node workers
+    (open-code bridge, c2-playwright runner), Python FastAPI services
+    (control/server panel, engram_mcp, context7_grep).
+  Architecture: Distributed control panel coordinating remote PCs over WebSocket
+    (HTTP long-polling fallback where Render kills WS). C1 panel -> C2 gateway
+    (DeepSeek via Chrome CDP) -> C3 orchestrator -> workers. control/ holds all
+    services; root requirements.txt and Dockerfiles at component level.
+  Testing: None present. No Go/Python/Node test files, no pytest config, no CI.
+    Workspace-wide test command is absent (heterogeneous multi-language).
+  Style: Spanish README/docs; conventional commits; env-driven config via
+    .env.example; per-component Dockerfile; .gitignore excludes node_modules,
+    .venv, .env, .atl, built binaries.
+
+rules:
+  proposal:
+    - Include rollback plan for risky changes
+  specs:
+    - Use Given/When/Then for scenarios
+    - Use RFC 2119 keywords (MUST, SHALL, SHOULD, MAY)
+  design:
+    - Include sequence diagrams for complex flows
+    - Document architecture decisions with rationale
+  tasks:
+    - Group by phase, use hierarchical numbering
+    - Keep tasks completable in one session
+  apply:
+    guidelines:
+      - Follow existing code patterns
+    tdd: false
+    test_command: ""
+  verify:
+    test_command: ""
+    build_command: ""
+    coverage_threshold: 0
+  archive:
+    - Warn before merging destructive deltas
+
+testing:
+  strict_tdd: false
+  reason: |
+    No workspace-level test command covers every in-scope project. The
+    workspace is heterogeneous (Go, Node, Python) with no unified runner, and
+    most projects have no test configuration or test files. strict_tdd fails
+    closed to false; per-project commands are preserved in the projects list
+    and are not combined into a single workspace runner.
+  projects:
+    - path: control/browser_service
+      stack: Go 1.23
+      test_command: go test ./...
+      framework: go test (no test files present)
+    - path: control/worker_code
+      stack: Go 1.22
+      test_command: go test ./...
+      framework: go test (no test files present)
+    - path: control/carlos_code
+      stack: Go 1.22
+      test_command: go test ./...
+      framework: go test (no test files present)
+    - path: control/gateway
+      stack: Go 1.25
+      test_command: go test ./...
+      framework: go test (no test files present)
+    - path: control/c2-playwright
+      stack: Node (playwright)
+      test_command: npm test
+      framework: stub (echo + exit 1)
+    - path: control/worker
+      stack: Node (ws)
+      test_command: ""
+      framework: none
+    - path: setup/bridge
+      stack: Node (ws)
+      test_command: ""
+      framework: none
+    - path: control/server
+      stack: Python FastAPI
+      test_command: ""
+      framework: none
+    - path: control/engram_mcp
+      stack: Python FastAPI
+      test_command: ""
+      framework: none
+    - path: control/context7_grep
+      stack: Python FastAPI
+      test_command: ""
+      framework: none

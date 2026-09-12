@@ -1,0 +1,24 @@
+# Dependencias
+node_modules/
+**/node_modules/
+
+# Logs y temporales
+*.log
+*.pid
+tmp/
+/tmp/
+**/.cache/
+.env
+.env.*
+
+# Binarios locales de dev
+/tmp/opencode/s1
+desarrollo/s1-panel/tmp/
+
+# Objetos Go
+*.exe
+*.test
+
+# Build
+dist/
+build/

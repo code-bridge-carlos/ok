@@ -1,0 +1,49 @@
+========================================
+INSTALACION CARLOS GATEWAY EN WINDOWS
+========================================
+
+PASO 1: CLONAR EL REPO
+-----------------------
+git clone https://github.com/1000carlospena-prog/cai.git
+cd cai
+
+PASO 2: COPIAR LOS EXE A TU ESCRITORIO
+----------------------------------------
+copy control\gateway\carlos-gateway.exe "$env:USERPROFILE\Desktop\"
+copy control\carlos_code\carlos-code.exe "$env:USERPROFILE\Desktop\"
+
+PASO 3: IR AL ESCRITORIO
+--------------------------
+cd "$env:USERPROFILE\Desktop"
+
+PASO 4: CORRER EL GATEWAY
+--------------------------
+.\carlos-gateway.exe
+
+PASO 5: ABRIR CHROME PARA INICIAR SESION
+------------------------------------------
+Abrir el navegador en:
+http://localhost:8001/webauth
+
+Se abre Chrome automaticamente en DeepSeek.
+Inicia sesion con tu email y password.
+El Gateway guarda los tokens solos.
+
+PASO 6: VERIFICAR
+-----------------
+http://localhost:8001/health
+http://localhost:8001/v1/models
+
+PASO 7: CORRER CARLOS CODE (en otra ventana PowerShell)
+---------------------------------------------------------
+cd "$env:USERPROFILE\Desktop"
+.\carlos-code.exe
+
+PASO 8: VERIFICAR CARLOS CODE
+------------------------------
+http://localhost:8002/health
+http://localhost:8002/tools
+
+========================================
+FIN DE LA INSTALACION
+========================================

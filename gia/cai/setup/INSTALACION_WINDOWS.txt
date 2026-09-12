@@ -1,0 +1,69 @@
+========================================
+CARLOS GATEWAY - INSTALACION EN WINDOWS
+========================================
+
+PASO 1: DESCARGAR EL EXE
+-------------------------
+Abrí PowerShell y ejecutá este comando:
+
+Invoke-WebRequest -Uri "https://github.com/1000carlospena-prog/cai/raw/main/control/gateway/carlos-gateway.exe" -OutFile "carlos-gateway.exe"
+
+
+PASO 2: CREAR CARPETA DE CREDENCIALES
+--------------------------------------
+mkdir credenciales
+
+
+PASO 3: CREAR ARCHIVO DE CREDENCIALES
+--------------------------------------
+Ejecutá este comando (reemplazá TU_EMAIL y TU_PASSWORD):
+
+@"
+{
+  "auth_profiles": {
+    "deepseek": {
+      "email": "TU_EMAIL_DEEPSEEK",
+      "password": "TU_PASSWORD"
+    }
+  }
+}
+"@ | Out-File -FilePath "credenciales\auth-profiles.json" -Encoding UTF8
+
+
+PASO 4: CORRER EL GATEWAY
+--------------------------
+.\carlos-gateway.exe
+
+
+PASO 5: VERIFICAR
+-----------------
+Abrí el navegador en:
+  http://localhost:8001/health
+  http://localhost:8001/v1/models
+
+
+VARIABLES DE ENTORNO (OPCIONAL)
+--------------------------------
+$env:PORT="8001"
+$env:TOKEN_FREE_GATEWAY_HEADLESS="true"
+$env:TOKEN_FREE_GATEWAY_AUTH_PROFILE="deepseek"
+
+
+========================================
+CARLOS CODE - INSTALACION EN WINDOWS
+========================================
+
+PASO 1: DESCARGAR EL EXE
+-------------------------
+Invoke-WebRequest -Uri "https://github.com/1000carlospena-prog/cai/raw/main/control/carlos_code/carlos-code.exe" -OutFile "carlos-code.exe"
+
+
+PASO 2: CORRER CARLOS CODE
+--------------------------
+.\carlos-code.exe
+
+
+PASO 3: VERIFICAR
+-----------------
+http://localhost:8002/health
+http://localhost:8002/tools

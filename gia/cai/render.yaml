@@ -1,0 +1,243 @@
+services:
+  # C1 - Panel Web (servicio principal)
+  - type: web
+    name: control
+    runtime: go
+    plan: free
+    region: oregon
+    buildCommand: ""
+    startCommand: "cai-control"
+    envVars:
+      - key: PORT
+        value: 8000
+      - key: CONTROL_TOKEN
+        value: "$(CONTROL_TOKEN)"
+      - key: PANEL_USER
+        value: "cmpf"
+      - key: PANEL_PASSWORD
+        value: "$(PANEL_PASSWORD)"
+      - key: SESSION_SECRET
+        value: "cai-panel-stable-secret"
+      - key: DATABASE_URL
+        value: "$(DATABASE_URL)"
+      - key: GITHUB_TOKEN
+        value: "$(GITHUB_TOKEN)"
+      - key: RENDER_API_KEY
+        value: "$(RENDER_API_KEY)"
+      - key: WORKER_CODE_URL
+        value: "https://worker-code.onrender.com"
+  # C3 - Carlos Code
+  - type: web
+    name: carlos-code
+    runtime: go
+    plan: free
+    region: oregon
+    buildCommand: ""
+    startCommand: "cai-carlos-code"
+    envVars:
+      - key: PORT
+        value: 8002
+      - key: CARLOS_CODE_URL
+        value: "https://carlos-code.onrender.com"
+      - key: GATEWAY_URL
+        value: "https://carlos-gateway.onrender.com"
+      - key: ENGRAM_URL
+        value: "https://engram-mcp-q9ln.onrender.com"
+      - key: CONTEXT7_URL
+        value: "https://context7-grep.onrender.com"
+      - key: PANEL_URL
+        value: "https://bridgecarlos.onrender.com"
+      - key: GITHUB_TOKEN
+        value: "$(GITHUB_TOKEN)"
+      - key: RENDER_API_KEY
+        value: "$(RENDER_API_KEY)"
+      - key: EDIT_MODE
+        value: "false"
+  # C4 - Engram MCP
+  - type: web
+    name: engram-mcp
+    runtime: python
+    plan: free
+    region: oregon
+    buildCommand: ""
+    startCommand: "engram-mcp"
+    envVars:
+      - key: PORT
+        value: 8001
+      - key: ENGRAM_URL
+        value: "https://engram-mcp-q9ln.onrender.com"
+      - key: RENDER_API_KEY
+        value: "$(RENDER_API_KEY)"
+      - key: GITHUB_TOKEN
+        value: "$(GITHUB_TOKEN)"
+  # C5 - Context7+grep
+  - type: web
+    name: context7-grep
+    runtime: python
+    plan: free
+    region: oregon
+    buildCommand: ""
+    startCommand: "context7-grep"
+    envVars:
+      - key: PORT
+        value: 8003
+      - key: CONTEXT7_URL
+        value: "https://context7-grep.onrender.com"
+      - key: RENDER_API_KEY
+        value: "$(RENDER_API_KEY)"
+      - key: GITHUB_TOKEN
+        value: "$(GITHUB_TOKEN)"
+  # C6 - Worker Code (base)
+  - type: web
+    name: worker-code
+    runtime: go
+    plan: free
+    region: oregon
+    buildCommand: ""
+    startCommand: "worker-code"
+    envVars:
+      - key: PORT
+        value: 10000
+      - key: PANEL_URL
+        value: "https://bridgecarlos.onrender.com"
+      - key: WORKER_TOKEN
+        value: "$(CONTROL_TOKEN)"
+      - key: WORKER_ID
+        value: "c6"
+      - key: WORKER_NAME
+        value: "Worker Code Base"
+      - key: PROJECT_PATH
+        value: "/workspaces/cai"
+      - key: GATEWAY_URL
+        value: "https://carlos-gateway.onrender.com"
+      - key: RENDER_API_KEY
+        value: "$(RENDER_API_KEY)"
+      - key: GIT_REPO
+        value: "/workspaces/cai"
+      - key: GIT_COMMIT
+        value: "false"
+      - key: GIT_PUSH
+        value: "false"
+      - key: POLL_INTERVAL
+        value: "10"
+  # Worker Code services - each uses same code but different Render API key
+  - type: web
+    name: worker-code-1
+    runtime: go
+    plan: free
+    region: oregon
+    buildCommand: ""
+    startCommand: "worker-code"
+    envVars:
+      - key: PORT
+        value: 10000
+      - key: PANEL_URL
+        value: https://bridgecarlos.onrender.com
+      - key: WORKER_TOKEN
+        value: $(CONTROL_TOKEN)
+      - key: WORKER_ID
+        value: worker-1
+      - key: WORKER_NAME
+        value: Worker Render 1
+      - key: PROJECT_PATH
+        value: /workspaces/cai
+      - key: GATEWAY_URL
+        value: https://carlos-gateway.onrender.com
+      - key: GIT_REPO
+        value: /workspaces/cai
+      - key: GIT_COMMIT
+        value: "false"
+      - key: GIT_PUSH
+        value: "false"
+      - key: POLL_INTERVAL
+        value: "10"
+  - type: web
+    name: worker-code-2
+    runtime: go
+    plan: free
+    region: oregon
+    buildCommand: ""
+    startCommand: "worker-code"
+    envVars:
+      - key: PORT
+        value: 10000
+      - key: PANEL_URL
+        value: https://bridgecarlos.onrender.com
+      - key: WORKER_TOKEN
+        value: $(CONTROL_TOKEN)
+      - key: WORKER_ID
+        value: worker-2
+      - key: WORKER_NAME
+        value: Worker Render 2
+      - key: PROJECT_PATH
+        value: /workspaces/cai
+      - key: GATEWAY_URL
+        value: https://carlos-gateway.onrender.com
+      - key: GIT_REPO
+        value: /workspaces/cai
+      - key: GIT_COMMIT
+        value: "false"
+      - key: GIT_PUSH
+        value: "false"
+      - key: POLL_INTERVAL
+        value: "10"
+  - type: web
+    name: worker-code-3
+    runtime: go
+    plan: free
+    region: oregon
+    buildCommand: ""
+    startCommand: "worker-code"
+    envVars:
+      - key: PORT
+        value: 10000
+      - key: PANEL_URL
+        value: https://bridgecarlos.onrender.com
+      - key: WORKER_TOKEN
+        value: $(CONTROL_TOKEN)
+      - key: WORKER_ID
+        value: worker-3
+      - key: WORKER_NAME
+        value: Worker Render 3
+      - key: PROJECT_PATH
+        value: /workspaces/cai
+      - key: GATEWAY_URL
+        value: https://carlos-gateway.onrender.com
+      - key: GIT_REPO
+        value: /workspaces/cai
+      - key: GIT_COMMIT
+        value: "false"
+      - key: GIT_PUSH
+        value: "false"
+      - key: POLL_INTERVAL
+        value: "10"
+  - type: web
+    name: worker-code-4
+    runtime: go
+    plan: free
+    region: oregon
+    buildCommand: ""
+    startCommand: "worker-code"
+    envVars:
+      - key: PORT
+        value: 10000
+      - key: PANEL_URL
+        value: https://bridgecarlos.onrender.com
+      - key: WORKER_TOKEN
+        value: $(CONTROL_TOKEN)
+      - key: WORKER_ID
+        value: worker-4
+      - key: WORKER_NAME
+        value: Worker Render 4
+      - key: PROJECT_PATH
+        value: /workspaces/cai
+      - key: GATEWAY_URL
+        value: https://carlos-gateway.onrender.com
+      - key: GIT_REPO
+        value: /workspaces/cai
+      - key: GIT_COMMIT
+        value: "false"
+      - key: GIT_PUSH
+        value: "false"
+      - key: POLL_INTERVAL
+        value: "10"

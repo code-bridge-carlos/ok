@@ -1,0 +1,2788 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Control Web — OpenCode Distribuido</title>
+<style>
+/* ===========================================================================
+   ATOMIC DESIGN (Brad Frost — https://github.com/bradfrost/atomic-design)
+   Niveles usados en este archivo:
+     átomos      (.atom-*)   botones, badges, inputs, iconos, tags
+     moléculas   (.mol-*)    tarjeta de PC, fila de subtarea, item de nav
+     organismos  (.org-*)    lista de equipos, historial, envío, tablero, modal
+     plantillas (.tpl-*)     layout (nav superior + área de contenido)
+     páginas     (.page-*)   cada vista del dashboard
+   =========================================================================== */
+
+/* ===========================================================================
+   DESIGN TOKENS (W3C Design Tokens Community Group —
+   https://github.com/design-tokens/community-group ; ver también
+   https://martinfowler.com/articles/design-token-based-ui-architecture.html)
+   Todos los valores de diseño viven como custom properties en :root.
+   Los componentes SOLO consumen tokens; nada hardcodeado abajo.
+   =========================================================================== */
+:root {
+  /* --- color --- */
+  --color-bg: #f4f5f7;
+  --color-surface: #ffffff;
+  --color-surface-2: #eef0f4;
+  --color-text: #1c2330;
+  --color-text-muted: #6b7280;
+  --color-border: #d6dae1;
+  --color-primary: #2563eb;
+  --color-primary-hover: #1d4ed8;
+  --color-primary-text: #ffffff;
+  --color-success: #16a34a;
+  --color-success-bg: #dcfce7;
+  --color-warning: #d97706;
+  --color-warning-bg: #fef3c7;
+  --color-danger: #dc2626;
+  --color-danger-bg: #fee2e2;
+  --color-unknown: #6b7280;
+  --color-unknown-bg: #e5e7eb;
+  --color-nav-bg: #111827;
+  --color-nav-text: #e5e7eb;
+  --color-nav-active: #2563eb;
+
+  /* --- espaciado --- */
+  --space-1: 0.25rem;
+  --space-2: 0.5rem;
+  --space-3: 0.75rem;
+  --space-4: 1rem;
+  --space-6: 1.5rem;
+  --space-8: 2rem;
+
+  /* --- tipografía --- */
+  --font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --font-xs: 0.72rem;
+  --font-sm: 0.82rem;
+  --font-md: 0.95rem;
+  --font-lg: 1.1rem;
+  --font-xl: 1.4rem;
+
+  /* --- radio --- */
+  --radius-sm: 4px;
+  --radius-md: 8px;
+  --radius-lg: 12px;
+  --radius-pill: 999px;
+
+  /* --- sombra --- */
+  --shadow-1: 0 1px 2px rgba(0,0,0,.06), 0 1px 3px rgba(0,0,0,.08);
+  --shadow-2: 0 6px 20px rgba(0,0,0,.12);
+  --shadow-nav: 0 0 0 2px rgba(37,99,235,.35), 0 2px 8px rgba(0,0,0,.25);
+
+  /* --- capas / z --- */
+  --z-modal: 50;
+}
+
+/* El atributo [hidden] debe ocultar SIEMPRE, aunque la regla de la clase
+   defina display (flex/grid/block). Sin esto, .org-modal/.tpl-dash con
+   display:flex vencen a [hidden]{display:none} y el modal/login quedan
+   visibles a la vez y el boton Cerrar no oculta nada. */
+[hidden] { display: none !important; }
+
+/* Tema oscuro (opcional, comentado). Descomentar para activar:
+:root {
+  --color-bg: #0f1420;
+  --color-surface: #1a2233;
+  --color-surface-2: #131a28;
+  --color-text: #e5e7eb;
+  --color-text-muted: #9aa3b2;
+  --color-border: #2b3445;
+  --color-nav-bg: #0b0f17;
+}
+*/
+
+* { box-sizing: border-box; }
+html, body { margin: 0; padding: 0; }
+body {
+  font-family: var(--font-family);
+  font-size: var(--font-md);
+  color: var(--color-text);
+  background: var(--color-bg);
+  line-height: 1.45;
+}
+
+/* ============================== ÁTOMOS ================================== */
+.atom-btn {
+  font: inherit;
+  font-size: var(--font-sm);
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+  color: var(--color-text);
+  cursor: pointer;
+  transition: background .15s ease, border-color .15s ease;
+}
+.atom-btn:hover { background: var(--color-surface-2); }
+.atom-btn--primary {
+  background: var(--color-primary);
+  border-color: var(--color-primary);
+  color: var(--color-primary-text);
+}
+.atom-btn--primary:hover { background: var(--color-primary-hover); border-color: var(--color-primary-hover); }
+.atom-btn--danger {
+  background: var(--color-danger);
+  border-color: var(--color-danger);
+  color: #fff;
+}
+.atom-btn--ghost { background: transparent; }
+.atom-btn:disabled { opacity: .5; cursor: not-allowed; }
+
+.atom-badge {
+  display: inline-block;
+  font-size: var(--font-xs);
+  font-weight: 600;
+  padding: var(--space-1) var(--space-2);
+  border-radius: var(--radius-pill);
+  text-transform: uppercase;
+  letter-spacing: .03em;
+}
+.atom-badge--ok { background: var(--color-success-bg); color: var(--color-success); }
+.atom-badge--busy { background: var(--color-warning-bg); color: var(--color-warning); }
+.atom-badge--down { background: var(--color-danger-bg); color: var(--color-danger); }
+.atom-badge--unknown { background: var(--color-unknown-bg); color: var(--color-unknown); }
+
+.atom-tag {
+  display: inline-block;
+  font-size: var(--font-xs);
+  font-weight: 700;
+  padding: var(--space-1) var(--space-2);
+  border-radius: var(--radius-sm);
+  background: var(--color-primary);
+  color: var(--color-primary-text);
+}
+
+.atom-icon { width: 18px; height: 18px; display: inline-block; vertical-align: middle; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+
+.atom-input, .atom-select, .atom-textarea {
+  font: inherit;
+  font-size: var(--font-sm);
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+  color: var(--color-text);
+  width: 100%;
+}
+.atom-textarea { min-height: 90px; resize: vertical; }
+.atom-label { display: block; font-size: var(--font-sm); font-weight: 600; margin-bottom: var(--space-1); }
+
+.atom-muted { color: var(--color-text-muted); font-size: var(--font-sm); }
+.atom-pre {
+  white-space: pre-wrap;
+  word-break: break-word;
+  background: var(--color-surface-2);
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius-md);
+  max-height: 220px;
+  overflow: auto;
+  font-size: var(--font-sm);
+  margin: var(--space-2) 0;
+}
+
+/* ============================ MOLÉCULAS ================================= */
+.mol-pc-card {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-1);
+  padding: var(--space-3) var(--space-4);
+  cursor: pointer;
+  transition: box-shadow .15s ease, transform .15s ease, border-color .15s ease;
+}
+.mol-pc-card:hover { box-shadow: var(--shadow-2); border-color: var(--color-primary); }
+.mol-pc-card__head { display: flex; align-items: center; justify-content: space-between; gap: var(--space-2); }
+.mol-pc-card__name { font-weight: 700; font-size: var(--font-lg); }
+.mol-pc-card__meta { font-size: var(--font-sm); color: var(--color-text-muted); margin: var(--space-1) 0; }
+.mol-pc-card__row { display: flex; flex-wrap: wrap; gap: var(--space-3); font-size: var(--font-sm); margin-top: var(--space-2); }
+.mol-pc-card__stat { display: flex; flex-direction: column; }
+.mol-pc-card__stat b { font-size: var(--font-md); }
+.mol-pc-card__actions { margin-top: var(--space-3); display: flex; gap: var(--space-2); }
+.mol-pc-card--leader { border-color: var(--color-primary); }
+
+.mol-nav-item {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius-md);
+  color: var(--color-nav-text);
+  cursor: pointer;
+  font-size: var(--font-sm);
+  white-space: nowrap;
+  user-select: none;
+}
+.mol-nav-item:hover { background: rgba(255,255,255,.08); }
+.mol-nav-item.is-active { background: var(--color-nav-active); color: #fff; box-shadow: var(--shadow-nav); }
+
+.mol-subtask-row {
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  padding: var(--space-2) var(--space-3);
+  margin: var(--space-2) 0;
+  background: var(--color-surface);
+}
+.mol-subtask-row__head { display: flex; align-items: center; justify-content: space-between; gap: var(--space-2); flex-wrap: wrap; }
+.mol-subtask-row__files { font-weight: 600; font-size: var(--font-sm); }
+
+.mol-task-pc {
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  padding: var(--space-3);
+  margin: var(--space-2) 0;
+  background: var(--color-surface-2);
+  cursor: pointer;
+}
+.mol-task-pc:hover { border-color: var(--color-primary); }
+.mol-task-pc__head { display: flex; align-items: center; justify-content: space-between; gap: var(--space-2); }
+.mol-task-pc__pending { margin-top: var(--space-2); display: flex; flex-direction: column; gap: var(--space-1); }
+.mol-pending-file { display: flex; align-items: center; justify-content: space-between; gap: var(--space-2); font-size: var(--font-sm); padding: var(--space-1) var(--space-2); background: var(--color-surface); border: 1px solid var(--color-border); border-radius: var(--radius-sm); }
+
+/* ============================ ORGANISMOS =============================== */
+.org-team-list, .org-history, .org-task-board {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: var(--space-4);
+}
+
+/* Conversation view */
+.org-conversation {
+  max-width: 800px;
+  margin: 0 auto;
+}
+.org-conversation__msg {
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  padding: var(--space-3) var(--space-4);
+  margin-bottom: var(--space-3);
+  background: var(--color-surface);
+  position: relative;
+}
+.org-conversation__msg--user {
+  border-left: 4px solid var(--color-primary);
+  background: #f0f7ff;
+}
+.org-conversation__msg--assistant {
+  border-left: 4px solid var(--color-success);
+  background: #f0fff4;
+}
+.org-conversation__msg--system {
+  border-left: 4px solid var(--color-warning);
+  background: #fffef0;
+}
+.org-conversation__header {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin-bottom: var(--space-2);
+  font-size: var(--font-sm);
+}
+.org-conversation__pc {
+  font-weight: 700;
+  color: var(--color-text);
+}
+.org-conversation__kind {
+  font-size: var(--font-xs);
+  color: var(--color-text-muted);
+  background: var(--color-surface-2);
+  padding: 2px 6px;
+  border-radius: var(--radius-sm);
+}
+.org-conversation__time {
+  font-size: var(--font-xs);
+  color: var(--color-text-muted);
+  margin-left: auto;
+}
+.org-conversation__content {
+  white-space: pre-wrap;
+  word-break: break-word;
+  font-size: var(--font-sm);
+  max-height: 400px;
+  overflow-y: auto;
+}
+.org-conversation__status {
+  margin-top: var(--space-2);
+}
+.org-conversation__files {
+  font-size: var(--font-xs);
+  color: var(--color-text-muted);
+  margin-top: var(--space-1);
+}
+.org-conversation__back {
+  margin-bottom: var(--space-4);
+}
+.conv-sep {
+  height: 1px;
+  background: var(--color-border);
+  margin: var(--space-2) 0;
+  opacity: 0.5;
+}
+.conv-actions {
+  background: #f8f9fa;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  padding: var(--space-2) var(--space-3);
+  margin: var(--space-2) 0;
+  font-family: var(--font-mono);
+  font-size: var(--font-xs);
+  max-height: 200px;
+  overflow-y: auto;
+}
+.conv-action {
+  padding: 2px 0;
+  color: var(--color-text-muted);
+  white-space: pre-wrap;
+  word-break: break-all;
+}
+.conv-action--glob { color: #6c5ce7; }
+.conv-action--read { color: #0984e3; }
+.conv-action--error { color: #d63031; }
+.conv-action--tool { color: #00b894; }
+.conv-text {
+  white-space: pre-wrap;
+  word-break: break-word;
+  font-size: var(--font-sm);
+  line-height: 1.6;
+  margin: var(--space-1) 0;
+}
+.org-send, .org-settings { max-width: 640px; }
+.org-form-section {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  padding: var(--space-4);
+  margin-bottom: var(--space-4);
+  box-shadow: var(--shadow-1);
+}
+.org-form-row { display: flex; flex-wrap: wrap; gap: var(--space-4); align-items: flex-end; }
+.org-check-grid { display: flex; flex-wrap: wrap; gap: var(--space-2) var(--space-4); margin-top: var(--space-2); }
+.org-check-grid label { display: flex; align-items: center; gap: var(--space-1); font-size: var(--font-sm); cursor: pointer; }
+
+.org-task-card {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-1);
+  padding: var(--space-4);
+  margin-bottom: var(--space-4);
+}
+.org-task-card__head { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); justify-content: space-between; }
+.org-task-card__title { font-weight: 700; font-size: var(--font-lg); }
+
+.org-modal {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--space-4);
+  z-index: var(--z-modal);
+}
+.org-modal__panel {
+  background: var(--color-surface);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-2);
+  width: min(720px, 100%);
+  max-height: 88vh;
+  overflow: auto;
+  padding: var(--space-4) var(--space-6);
+}
+.org-modal__head { display: flex; align-items: center; justify-content: space-between; gap: var(--space-2); position: sticky; top: 0; background: var(--color-surface); padding-bottom: var(--space-2); }
+
+/* ============================ PLANTILLAS =============================== */
+.tpl-dash { min-height: 100vh; display: flex; flex-direction: column; }
+.tpl-nav {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  background: var(--color-nav-bg);
+  color: var(--color-nav-text);
+  padding: var(--space-2) var(--space-4);
+  flex-wrap: wrap;
+}
+.tpl-nav__brand { font-weight: 800; font-size: var(--font-lg); margin-right: var(--space-4); display: flex; align-items: center; gap: var(--space-2); }
+.tpl-nav__links { display: flex; gap: var(--space-1); flex-wrap: wrap; align-items: center; flex: 1; justify-content: center; }
+.tpl-nav__status { margin-left: auto; font-size: var(--font-xs); display: flex; align-items: center; gap: var(--space-2); }
+.tpl-content { padding: var(--space-6); flex: 1; }
+.tpl-content__title { font-size: var(--font-xl); margin: 0 0 var(--space-4); }
+
+/* ============================== PÁGINAS ================================ */
+.page { display: none; }
+.page.is-active { display: block; }
+
+/* Responsive: nav siempre visible, uno al lado del otro (puede hacer wrap) */
+@media (max-width: 640px) {
+  .tpl-nav { flex-wrap: wrap; }
+  .tpl-nav__links { flex: 1 1 100%; justify-content: center; }
+  .mol-nav-item { justify-content: center; }
+  .tpl-content { padding: var(--space-4); }
+}
+
+/* ============================== SERVICIOS ============================== */
+.services-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+    gap: var(--space-4);
+}
+
+.service-card {
+    background: var(--color-surface);
+    border-radius: var(--radius-lg);
+    padding: var(--space-4);
+    box-shadow: var(--shadow-1);
+    cursor: pointer;
+    transition: var(--transition);
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-3);
+    border: 1px solid transparent;
+    position: relative;
+}
+
+.service-card:hover {
+    transform: translateY(-4px);
+    box-shadow: var(--shadow-2);
+    border-color: var(--color-primary);
+}
+
+.service-icon {
+    width: 48px;
+    height: 48px;
+    border-radius: var(--radius-md);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.5rem;
+    flex-shrink: 0;
+}
+
+.service-content {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-2);
+}
+
+.service-name {
+    font-size: 1.1rem;
+    font-weight: 600;
+    color: var(--color-text);
+}
+
+.service-description {
+    font-size: var(--font-sm);
+    color: var(--color-text-muted);
+    line-height: 1.5;
+    flex: 1;
+}
+
+.service-footer {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-top: var(--space-2);
+    padding-top: var(--space-2);
+    border-top: 1px solid var(--color-border);
+}
+
+.service-status {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    font-size: var(--font-xs);
+    font-weight: 600;
+    padding: var(--space-1) var(--space-2);
+    border-radius: var(--radius-pill);
+}
+
+.service-status.active {
+    background: var(--color-success-bg);
+    color: var(--color-success);
+}
+
+.service-status.inactive {
+    background: var(--color-warning-bg);
+    color: var(--color-warning);
+}
+
+.service-id {
+    font-size: var(--font-xs);
+    color: var(--color-text-muted);
+    font-family: monospace;
+    background: var(--color-surface-2);
+    padding: var(--space-1) var(--space-2);
+    border-radius: var(--radius-sm);
+}
+
+/* Toast notifications */
+.toast {
+    position: fixed;
+    bottom: var(--space-4);
+    right: var(--space-4);
+    padding: var(--space-2) var(--space-4);
+    border-radius: var(--radius-md);
+    color: white;
+    font-weight: 500;
+    z-index: 1000;
+    transform: translateY(100px);
+    opacity: 0;
+    transition: all 0.3s ease;
+    box-shadow: var(--shadow-2);
+}
+
+.toast.show {
+    transform: translateY(0);
+    opacity: 1;
+}
+
+.toast-success { background: var(--color-success); }
+.toast-error { background: var(--color-danger); }
+.toast-info { background: var(--color-primary); }
+.toast-warning { background: var(--color-warning); }
+/* Service chips */
+.service-chips{display:flex;flex-wrap:wrap;gap:4px;margin-top:4px}
+.service-chip{display:inline-block;padding:2px 8px;font-size:11px;border-radius:12px;background:var(--color-surface-2);color:var(--color-text-muted);text-decoration:none;border:1px solid var(--color-border);transition:all .15s}
+.service-chip:hover{background:var(--color-primary);color:#fff;border-color:var(--color-primary)}
+
+/* Keepalive toggle */
+.ka-switch{position:relative;display:inline-block;width:48px;height:26px;cursor:pointer}
+.ka-switch input{opacity:0;width:0;height:0}
+.ka-slider{position:absolute;inset:0;background:#555;border-radius:26px;transition:.3s}
+.ka-slider::before{content:"";position:absolute;height:20px;width:20px;left:3px;bottom:3px;background:#fff;border-radius:50%;transition:.3s}
+.ka-switch input:checked + .ka-slider{background:#22c55e}
+.ka-switch input:checked + .ka-slider::before{transform:translateX(22px)}
+.ka-status{margin-top:var(--space-2);display:flex;flex-wrap:wrap;gap:var(--space-2)}
+.ka-svc{display:inline-flex;align-items:center;gap:4px;padding:3px 8px;border-radius:12px;font-size:11px;border:1px solid var(--color-border);background:var(--color-surface-2)}
+.ka-svc.ok{border-color:#22c55e40;color:#22c55e}
+.ka-svc.error{border-color:#ef444440;color:#ef4444}
+</style>
+</head>
+<body>
+
+<!-- ====================== PLANTILLA: APP (dashboard) ====================== -->
+<div id="app" class="tpl-dash" hidden>
+  <nav class="tpl-nav">
+    <span class="tpl-nav__brand">
+      <svg class="atom-icon" viewBox="0 0 24 24"><rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8M12 17v4"/></svg>
+      Control
+    </span>
+    <div class="tpl-nav__links" id="nav-links">
+      <div class="mol-nav-item is-active" data-view="workers">
+        <svg class="atom-icon" viewBox="0 0 24 24"><rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8M12 17v4"/></svg> Worker
+      </div>
+      <div class="mol-nav-item" data-view="send">
+        <svg class="atom-icon" viewBox="0 0 24 24"><path d="M22 2 11 13M22 2l-7 20-4-9-9-4 20-7z"/></svg> Enviar tarea
+      </div>
+      <div class="mol-nav-item" data-view="tasks">
+        <svg class="atom-icon" viewBox="0 0 24 24"><path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"/></svg> Tareas
+      </div>
+      <div class="mol-nav-item" data-view="deepseek">
+        <svg class="atom-icon" viewBox="0 0 24 24"><path d="M12 2a10 10 0 1 0 10 10A10 10 0 0 0 12 2zm0 18a8 8 0 1 1 8-8 8 8 0 0 1-8 8z"/><path d="M12 6v6l4 2"/></svg> DeepSeek
+      </div>
+
+      <div class="mol-nav-item" data-view="services">
+        <svg class="atom-icon" viewBox="0 0 24 24"><rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8M12 17v4"/></svg> Servicios
+      </div>
+      <div class="mol-nav-item" data-view="carloscode">
+        <svg class="atom-icon" viewBox="0 0 24 24"><path d="M12 2a10 10 0 1 0 10 10A10 10 0 0 0 12 2zm0 18a8 8 0 1 1 8-8 8 8 0 0 1-8 8z"/><path d="M12 6v6l4 2"/></svg> Carlos Code
+      </div>
+
+      <div class="mol-nav-item" data-view="settings">
+        <svg class="atom-icon" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-2.82 1.17V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 7 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 2.6 15H2.5a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4 9.4l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.6V4.5a2 2 0 0 1 4 0v.09A1.65 1.65 0 0 0 17 4.6a1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 21.4 9h.1a2 2 0 0 1 0 4h-.09z"/></svg> Ajustes
+      </div>
+    </div>
+    <div class="tpl-nav__status">
+      <span id="status" class="atom-muted">conectando…</span>
+      <a class="atom-btn atom-btn--ghost" href="/logout" style="color:var(--color-nav-text);border-color:var(--color-border)">Salir</a>
+    </div>
+  </nav>
+
+  <main class="tpl-content">
+    <!-- Vista: Workers conectados -->
+    <section class="page page-teams is-active" id="view-teams">
+      <div class="org-form-row" style="align-items:center; margin-bottom:var(--space-4)">
+        <h1 class="tpl-content__title" style="margin:0">Workers conectados</h1>
+        <button class="atom-btn atom-btn--primary" id="teams-refresh">Refrescar</button>
+      </div>
+      <p class="atom-muted">Click en un worker abre su consola propia (TUI texto).</p>
+      <div class="org-worker-list" id="worker-list"></div>
+      <!-- Sub-vista: Historial de workers (mismo origen que vista Historial) -->
+      <h2 style="margin-top:var(--space-6)">Historial</h2>
+      <p class="atom-muted">Último estado conocido, incluso si se desconectan. Cada worker tiene un botón de reconexión.</p>
+      <div class="org-history" id="history-list-embedded"></div>
+    </section>
+
+    <!-- Vista: Enviar tarea -->
+    <section class="page page-send" id="view-send">
+      <h1 class="tpl-content__title">Enviar tarea</h1>
+      <div class="org-send">
+        <div class="org-form-section">
+          <label class="atom-label" for="send-prompt">Prompt</label>
+          <textarea class="atom-textarea" id="send-prompt" placeholder="Escribe el prompt; Carlos Code planifica y reparte entre las PCs…"></textarea>
+        </div>
+        <div class="org-form-section">
+          <div class="org-form-row">
+            <div style="flex:1; min-width:200px">
+              <label class="atom-label" for="send-leader">Planificador / líder</label>
+              <select class="atom-select" id="send-leader"></select>
+              <span class="atom-muted" id="send-cc-status" style="display:block; margin-top:var(--space-1); font-size:0.85em"></span>
+            </div>
+            <div style="flex:1; min-width:200px">
+              <label class="atom-label" for="send-mode">Modo de reparto</label>
+              <select class="atom-select" id="send-mode">
+                <option value="percent">Por porcentaje</option>
+                <option value="dynamic">Dinámico (reserva)</option>
+              </select>
+            </div>
+            <div style="flex:1; min-width:200px">
+              <label class="atom-label" for="send-section">Sección de Carlos Code</label>
+              <select class="atom-select" id="send-section">
+                <option value="">(misma que la consola)</option>
+              </select>
+              <span class="atom-muted" id="send-section-status" style="display:block; margin-top:var(--space-1); font-size:0.85em"></span>
+            </div>
+          </div>
+            <div style="margin-top:var(--space-4)">
+              <label class="atom-label">PCs trabajadoras (opcional)</label>
+              <div class="org-check-grid" id="send-workers"></div>
+            </div>
+            <div id="send-percent" class="org-form-section" hidden style="margin-top:var(--space-4)">
+              <label class="atom-label">Reparto por porcentaje (por PC)</label>
+              <div id="send-percent-rows" class="org-pct-grid"></div>
+              <div class="atom-muted" style="margin-top:var(--space-2)">Total: <b id="send-percent-total">100%</b> · por defecto equitativo; al editar uno, el resto se reparte en partes iguales.</div>
+            </div>
+          <div style="margin-top:var(--space-4)">
+            <button class="atom-btn atom-btn--primary" id="send-btn">Enviar tarea</button>
+          </div>
+        </div>
+      </div>
+      <div id="send-plan-panel" style="margin-top:var(--space-4)">
+        <h3>Plan de Carlos Code</h3>
+        <p class="atom-muted">Equivale a /start y /ready de la consola C3.</p>
+        <div style="display:flex; gap:var(--space-2); flex-wrap:wrap">
+          <button class="atom-btn atom-btn--ghost" id="send-approve-plan">Aprobar plan (= /start)</button>
+          <button class="atom-btn atom-btn--primary" id="send-approve-subs" hidden>Aprobar sub-planes (= /ready)</button>
+        </div>
+        <div id="send-subplans" style="margin-top:var(--space-2)"></div>
+      </div>
+      <h2 style="margin-top:var(--space-6)">Tareas</h2>
+      <div id="send-task-board"></div>
+    </section>
+
+    <!-- Vista: Tareas -->
+    <section class="page page-tasks" id="view-tasks">
+      <div class="org-form-row" style="align-items:center; margin-bottom:var(--space-4)">
+        <h1 class="tpl-content__title" style="margin:0">Tareas</h1>
+        <button class="atom-btn atom-btn--ghost" id="tasks-history-btn">📜 Historial de tareas</button>
+      </div>
+      <div id="task-board"></div>
+    </section>
+
+    <!-- Vista: Historial de tareas -->
+    <section class="page page-taskhistory" id="view-taskhistory">
+      <div class="org-form-row" style="align-items:center; margin-bottom:var(--space-4)">
+        <h1 class="tpl-content__title" style="margin:0">Historial de tareas</h1>
+        <button class="atom-btn atom-btn--danger" id="taskhistory-clear">Clear (borrar todo)</button>
+      </div>
+      <div id="taskhistory-list"></div>
+    </section>
+
+    <!-- Vista: Conversacion de tarea -->
+    <section class="page page-conversation" id="view-conversation">
+      <button class="atom-btn atom-btn--ghost org-conversation__back" id="conv-back">← Volver</button>
+      <h1 class="tpl-content__title" id="conv-title">Conversación</h1>
+      <div class="org-conversation" id="conv-messages"></div>
+    </section>
+
+    <!-- Vista: Ajustes -->
+    <section class="page page-settings" id="view-settings">
+      <h1 class="tpl-content__title">Ajustes</h1>
+      <div class="org-settings">
+        <div class="org-form-section">
+          <p class="atom-muted">Próximamente…</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- Vista: DeepSeek Chat -->
+    <section class="page page-deepseek" id="view-deepseek">
+      <div class="org-form-row" style="align-items:center; margin-bottom:var(--space-4)">
+        <h1 class="tpl-content__title" style="margin:0">DeepSeek Chat (vía C2 Gateway)</h1>
+        <button class="atom-btn atom-btn--ghost" id="ds-history-btn">📜 Historial</button>
+      </div>
+      <p class="atom-muted">Envía mensajes directamente a DeepSeek a través del gateway C2 (runner captura auth, gateway hace HTTP directo).</p>
+      <div class="org-form-section">
+        <div style="display:flex; gap:var(--space-3); align-items:flex-end; flex-wrap:wrap; margin-bottom:var(--space-4)">
+          <div style="flex:1; min-width:200px">
+            <label class="atom-label" for="ds-model">Modelo</label>
+            <select class="atom-select" id="ds-model">
+              <option value="deepseek-chat">deepseek-chat</option>
+              <option value="deepseek-reasoner">deepseek-reasoner</option>
+            </select>
+          </div>
+          <div style="flex:1; min-width:200px">
+            <label class="atom-label" for="ds-status">Estado gateway</label>
+            <input class="atom-input" id="ds-status" readonly style="background:var(--color-surface-2); cursor:default" />
+          </div>
+        </div>
+        <div class="org-conversation" id="ds-messages" style="max-height:400px; overflow-y:auto; margin-bottom:var(--space-4); padding:var(--space-3); border:1px solid var(--color-border); border-radius:var(--radius-lg); background:var(--color-surface);">
+          <p class="atom-muted">Sin mensajes. Escribe abajo para empezar.</p>
+        </div>
+        <div style="display:flex; gap:var(--space-2); flex-wrap:wrap">
+          <div style="flex:1; min-width:250px">
+            <label class="atom-label" for="ds-input">Mensaje</label>
+            <textarea class="atom-textarea" id="ds-input" placeholder="Escribe tu mensaje para DeepSeek…" rows="3"></textarea>
+          </div>
+          <div style="display:flex; flex-direction:column; gap:var(--space-2); justify-content:flex-end">
+            <button class="atom-btn atom-btn--primary" id="ds-send" style="width:100%">Enviar</button>
+            <button class="atom-btn atom-btn--ghost" id="ds-clear" style="width:100%">Limpiar</button>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Vista: Servicios -->
+    <section class="page page-services" id="view-services">
+      <div class="page-header">
+        <h1 class="tpl-content__title"><i class="fas fa-cubes"></i> Servicios</h1>
+        <div style="display:flex; align-items:center; gap:var(--space-3);">
+          <label class="ka-switch" title="Keep-alive: ping de estado a cada servicio cada 5 min para evitar spin-down de Render">
+            <input type="checkbox" id="keepalive-toggle">
+            <span class="ka-slider"></span>
+          </label>
+          <span id="keepalive-label" class="atom-muted">OFF</span>
+          <span id="keepalive-countdown" class="atom-muted" style="font-family:monospace;font-size:12px;min-width:50px;display:none" title="Tiempo para el próximo ping">5:00</span>
+          <button class="btn-primary" id="refreshServicesBtn">
+            <i class="fas fa-sync"></i> Refrescar
+          </button>
+        </div>
+      </div>
+      <div id="keepalive-status" class="ka-status"></div>
+      <div id="resources-panel" style="margin:var(--space-3) 0;padding:var(--space-3);border:1px solid var(--color-border);border-radius:var(--radius-lg);background:var(--color-surface);display:none">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:var(--space-2)">
+          <span style="font-weight:600;font-size:13px"><i class="fas fa-microchip"></i> Recursos</span>
+          <button class="btn-secondary" id="refreshResourcesBtn" style="font-size:11px;padding:2px 8px"><i class="fas fa-sync"></i></button>
+        </div>
+        <div id="resources-grid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:var(--space-2)"></div>
+      </div>
+      <div id="servicesContainer" class="services-grid">
+        <!-- Cards generadas por services.js -->
+      </div>
+    </section>
+
+    <!-- Vista: Carlos Code Chat -->
+    <section class="page page-carloscode" id="view-carloscode">
+      <div class="org-form-row" style="align-items:center; margin-bottom:var(--space-4)">
+        <h1 class="tpl-content__title" style="margin:0">🧠 Carlos Code — Chat Interactivo</h1>
+        <button class="atom-btn atom-btn--ghost" id="cc-history-btn">📜 Historial</button>
+      </div>
+      <p class="atom-muted">TUI texto via C1 (<span style="font-family:monospace">/api/c3/*</span> mismo origen). Comandos: /sections /models /clear /commands /compact /start /ready. Enter = OK. Esc = cancela stream.</p>
+      <div class="org-form-section">
+        <div id="cc-tokens" style="margin-bottom:var(--space-2); font-family:'Fira Code',monospace; font-size:12px; color:#a3e635;">tokens: in=0 out=0 total=0</div>
+        <div id="cc-tokenbar" style="height:6px; border-radius:3px; background:#333; margin-bottom:var(--space-3); overflow:hidden;"><div id="cc-tokenbar-fill" style="height:100%; width:0%; background:#7c3aed;"></div></div>
+        <div class="cc-terminal" id="cc-terminal" style="max-height:500px; overflow-y:auto; margin-bottom:var(--space-4); padding:var(--space-3); border:1px solid var(--color-border); border-radius:var(--radius-lg); background:#1a1a2e; color:#e0e0e0; font-family:'Fira Code',monospace; font-size:13px; line-height:1.6;">
+          <div class="cc-welcome" style="color:#7c3aed;">🧠 Carlos Code v1.0 — Escribe un comando o mensaje</div>
+          <div class="cc-welcome" style="color:#666;">Comandos: /help, /status, /plan [tarea], /tools, /clear</div>
+        </div>
+        <div style="display:flex; gap:var(--space-2); flex-wrap:wrap">
+          <div style="flex:1; min-width:250px">
+            <input class="atom-input" id="cc-input" placeholder="Escribe un comando o mensaje..." style="font-family:'Fira Code',monospace; background:#1a1a2e; color:#e0e0e0; border-color:#333;" />
+          </div>
+          <button class="atom-btn atom-btn--primary" id="cc-send">Enviar</button>
+          <button class="atom-btn atom-btn--ghost" id="cc-clear">Limpiar</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- Permanent OK button CSS + HTML injected at bottom of body -->
+    <style>
+      .ok-permanent { position: fixed; bottom: var(--space-4); right: var(--space-4); z-index: 900; }
+      .ok-permanent button { font-size: var(--font-sm); }
+    </style>
+
+    <div class="ok-permanent" id="okPermanentButton" hidden>
+      <button class="atom-btn atom-btn--primary" id="okBtn">OK</button>
+    </div>
+
+    <!-- Vista: Consola de worker (TUI texto, una por worker_code) -->
+    <section class="page page-workerconsole" id="view-workerconsole">
+      <button class="atom-btn atom-btn--ghost org-conversation__back" id="wconsole-back">← Volver a Workers</button>
+      <h1 class="tpl-content__title">Consola Worker — <span id="wconsole-title">—</span></h1>
+      <p class="atom-muted">Consola propia del worker (texto). Comandos: /models /clear /commands. Enter = OK. Esc = cancelar.</p>
+      <div class="org-form-section">
+        <div id="wconsole-tokens" style="margin-bottom:var(--space-2); font-family:'Fira Code',monospace; font-size:12px; color:#a3e635;">tokens: in=0 out=0 total=0</div>
+        <div id="wconsole-tokenbar" style="height:6px; border-radius:3px; background:#333; margin-bottom:var(--space-3); overflow:hidden;"><div id="wconsole-tokenbar-fill" style="height:100%; width:0%; background:#10b981;"></div></div>
+        <div class="wconsole-terminal" id="wconsole-terminal" style="max-height:500px; overflow-y:auto; margin-bottom:var(--space-4); padding:var(--space-3); border:1px solid var(--color-border); border-radius:var(--radius-lg); background:#1a1a2e; color:#e0e0e0; font-family:'Fira Code',monospace; font-size:13px; line-height:1.6;">
+          <div style="color:#10b981;">🖥 Consola worker — escribe /commands para ayuda</div>
+        </div>
+        <div style="display:flex; gap:var(--space-2); flex-wrap:wrap">
+          <div style="flex:1; min-width:250px">
+            <input class="atom-input" id="wconsole-input" placeholder="/models /clear /commands" style="font-family:'Fira Code',monospace; background:#1a1a2e; color:#e0e0e0; border-color:#333;" />
+          </div>
+          <button class="atom-btn atom-btn--primary" id="wconsole-send">Enviar</button>
+          <button class="atom-btn atom-btn--ghost" id="wconsole-clear">Limpiar</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- Vista: Historial DeepSeek -->
+    <section class="page page-gw-history" id="view-gw-history">
+      <div class="org-form-row" style="align-items:center; margin-bottom:var(--space-4)">
+        <h1 class="tpl-content__title" style="margin:0">Historial DeepSeek</h1>
+        <button class="atom-btn atom-btn--ghost" id="gw-refresh">Refrescar</button>
+        <button class="atom-btn atom-btn--danger" id="gw-delete-all">Borrar todo</button>
+      </div>
+      <p class="atom-muted">Peticiones al gateway DeepSeek. Se muestra por orden cronologico (mas reciente primero).</p>
+      <div id="gw-history-list"></div>
+    </section>
+
+    <!-- Vista: Historial Carlos Code -->
+    <section class="page page-cc-history" id="view-cc-history">
+      <div class="org-form-row" style="align-items:center; margin-bottom:var(--space-4)">
+        <h1 class="tpl-content__title" style="margin:0">Historial Carlos Code</h1>
+        <button class="atom-btn atom-btn--ghost" id="cc-refresh">Refrescar</button>
+        <button class="atom-btn atom-btn--danger" id="cc-delete-all">Borrar todo</button>
+      </div>
+      <p class="atom-muted">Planificaciones y actualizaciones de Carlos Code.</p>
+      <div id="cc-history-list"></div>
+    </section>
+  </main>
+</div>
+
+<!-- ====================== PÁGINA: Login ====================== -->
+<div id="login-page" class="tpl-dash" hidden>
+  <main class="tpl-content" style="max-width:420px; margin:auto">
+    <div class="org-form-section">
+      <h1 class="tpl-content__title">Iniciar sesión</h1>
+      <p class="atom-muted">Panel de control de Carlos.</p>
+      <form id="login-form">
+        <div style="margin-bottom:var(--space-3)">
+          <label class="atom-label" for="login-user">Usuario</label>
+          <input class="atom-input" id="login-user" name="user" autocomplete="username" required />
+        </div>
+        <div style="margin-bottom:var(--space-4)">
+          <label class="atom-label" for="login-pass">Contraseña</label>
+          <input class="atom-input" id="login-pass" name="password" type="password" autocomplete="current-password" required />
+        </div>
+        <button class="atom-btn atom-btn--primary" type="submit" style="width:100%">Entrar</button>
+        <p class="atom-badge atom-badge--down" id="login-error" hidden>Usuario o contraseña incorrectos</p>
+      </form>
+    </div>
+  </main>
+</div>
+
+<!-- ====================== ORGANISMO: Modal ====================== -->
+<div id="modal-root" class="org-modal" hidden>
+  <div class="org-modal__panel">
+    <div class="org-modal__head">
+      <h2 class="tpl-content__title" id="modal-title" style="margin:0">Detalle</h2>
+      <button class="atom-btn atom-btn--ghost" id="modal-close">Cerrar</button>
+    </div>
+    <div id="modal-body"></div>
+  </div>
+</div>
+
+<script>
+/* ===========================================================================
+   ATOMIC DESIGN: el JS se organiza por niveles acordes al HTML
+   (átomos = helpers DOM/estado, moléculas = render de tarjetas/filas,
+    organismos = render de vistas, plantillas = navegación/layout,
+    páginas = controlador de cada vista).
+   =========================================================================== */
+/* ===========================================================================
+   DESIGN TOKENS: los valores consumidos por el JS (textos de estado, labels)
+   se derivan de los mismos tokens semánticos definidos en :root.
+   =========================================================================== */
+
+// ----------------------------- ÁTOMOS (helpers) ---------------------------
+const $ = (id) => document.getElementById(id);
+
+const STATUS_MAP = {
+  disponible: { cls: "atom-badge--ok",    label: "Disponible" },
+  ocupado:     { cls: "atom-badge--busy",  label: "Ocupado" },
+  desconocido: { cls: "atom-badge--unknown", label: "Desconocido" },
+  down:        { cls: "atom-badge--down",  label: "Caído" },
+  // estados de subtarea de tarea
+  planning:   { cls: "atom-badge--busy",   label: "Planificando" },
+  pending:    { cls: "atom-badge--unknown", label: "Pendiente" },
+  running:    { cls: "atom-badge--busy",   label: "En ejecución" },
+  done:       { cls: "atom-badge--ok",     label: "Hecho" },
+  failed:     { cls: "atom-badge--down",   label: "Falló" },
+  returned:   { cls: "atom-badge--busy",   label: "Devuelto" },
+};
+function badge(status) {
+  const m = STATUS_MAP[status] || STATUS_MAP.desconocido;
+  return `<span class="atom-badge ${m.cls}">${m.label}</span>`;
+}
+function escapeHtml(s) {
+  return (s == null ? "" : String(s)).replace(/[&<>"']/g, c =>
+    ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+}
+async function apiFetch(url, opts = {}) {
+  return fetch(url, Object.assign({ credentials: "same-origin" }, opts));
+}
+async function apiJSON(url, method = "GET", body) {
+  const res = await apiFetch(url, {
+    method,
+    headers: body ? { "Content-Type": "application/json" } : undefined,
+    body: body ? JSON.stringify(body) : undefined,
+  });
+  if (!res.ok) throw { status: res.status, text: await res.text() };
+  return res.status === 204 ? null : res.json();
+}
+
+// ----------------------------- ESTADO GLOBAL ------------------------------
+const state = { workers: [], worker_memory: [], principal: null, mode: "percent", tasks: [] };
+let currentView = "teams";
+let sendPopulated = false;
+let lastDrill = null;
+
+// ----------------------------- PLANTILLA: navegación ----------------------
+document.querySelectorAll(".mol-nav-item").forEach(item => {
+  item.onclick = () => switchView(item.getAttribute("data-view"));
+});
+function switchView(view) {
+  currentView = view;
+  document.querySelectorAll(".mol-nav-item").forEach(n =>
+    n.classList.toggle("is-active", n.getAttribute("data-view") === view));
+  $("nav-links").classList.remove("is-open");
+  document.querySelectorAll(".page").forEach(p => p.classList.remove("is-active"));
+  $("view-" + view).classList.add("is-active");
+  renderActive();
+}
+
+// Botones de historial (enlaces estáticos en el HTML)
+$("tasks-history-btn").onclick = () => switchView("taskhistory");
+$("taskhistory-clear").onclick = async () => {
+  if (!confirm("¿Borrar TODO el historial de tareas? Esta acción no se puede deshacer.")) return;
+  try { await apiJSON("/api/tasks/clear", "POST"); refresh(); }
+  catch (e) { alert("Error al limpiar historial: " + (e.status || "")); }
+};
+// Historial DeepSeek
+$("gw-refresh").onclick = () => renderGatewayHistory();
+$("gw-delete-all").onclick = async () => {
+  if (!confirm("¿Borrar TODO el historial de DeepSeek?")) return;
+  try { await apiJSON("/api/gateway-history", "DELETE"); renderGatewayHistory(); }
+  catch (e) { alert("Error: " + (e.status || "")); }
+};
+// Historial Carlos Code
+$("cc-refresh").onclick = () => renderCarlosHistory();
+$("cc-delete-all").onclick = async () => {
+  if (!confirm("¿Borrar TODO el historial de Carlos Code?")) return;
+  try { await apiJSON("/api/carlos-history", "DELETE"); renderCarlosHistory(); }
+  catch (e) { alert("Error: " + (e.status || "")); }
+};
+// Botones de historial en sub-vistas
+$("ds-history-btn").onclick = () => switchView("gw-history");
+$("cc-history-btn").onclick = () => switchView("cc-history");
+
+// ----------------------------- ÁTOMOS: modal ------------------------------
+function openModal(title, html) {
+  $("modal-title").textContent = title;
+  $("modal-body").innerHTML = html;
+  $("modal-root").hidden = false;
+}
+function closeModal() { $("modal-root").hidden = true; $("modal-body").innerHTML = ""; }
+$("modal-close").onclick = closeModal;
+$("modal-root").onclick = (e) => { if (e.target === $("modal-root")) closeModal(); };
+
+// ----------------------------- MOLÉCULAS ----------------------------------
+function pcCardHtml(w) {
+  const hw = [w.brand, w.model].filter(Boolean).join(" ") || "—";
+  const st = w.stats || { tasks: 0, words: 0, tokens: 0 };
+  const isLeader = w.id === state.principal;
+  const taskLabel = w.task_id ? `<span class="atom-muted">Tarea: ${escapeHtml(w.task_id)}</span>` : `<span class="atom-muted">sin tarea</span>`;
+  const actions = isLeader
+    ? `<span class="atom-tag">LÍDER</span>`
+    : `<button class="atom-btn atom-btn--primary" data-leader="${escapeHtml(w.id)}">Hacer líder</button>`;
+  return `<div class="mol-pc-card ${isLeader ? "mol-pc-card--leader" : ""}" data-drill="${escapeHtml(w.id)}">
+    <div class="mol-pc-card__head">
+      <span class="mol-pc-card__name">${escapeHtml(w.name)}</span>
+      ${badge(w.status)}
+    </div>
+    <div class="mol-pc-card__meta">${escapeHtml(hw)} · ${escapeHtml(w.os || "—")}</div>
+    <div class="mol-pc-card__row">
+      <div class="mol-pc-card__stat"><span class="atom-muted">Rend.</span><b>${w.perf ?? "—"}</b></div>
+      <div class="mol-pc-card__stat"><span class="atom-muted">% peso</span><b>${w.weight ?? "—"}</b></div>
+      <div class="mol-pc-card__stat"><span class="atom-muted">Tareas</span><b>${st.tasks}</b></div>
+      <div class="mol-pc-card__stat"><span class="atom-muted">Palabras</span><b>${st.words}</b></div>
+      <div class="mol-pc-card__stat"><span class="atom-muted">Tokens</span><b>${st.tokens}</b></div>
+    </div>
+    <div class="mol-pc-card__meta" style="margin-top:var(--space-2)">${taskLabel}</div>
+    <div class="mol-pc-card__actions">${actions}</div>
+  </div>`;
+}
+
+// Tarjeta de solo lectura (Historial): muestra TODAS las características y
+// estado conectado/desconectado, con Reconectar (pide re-registro) y
+// Desconectar manual (borrado ya existente vía /api/worker/:id/kick).
+ function pcCardStaticHtml(w, isConn) {
+   const hw = [w.brand, w.model].filter(Boolean).join(" ") || "—";
+   const st = w.stats || { tasks: 0, words: 0, tokens: 0 };
+   const statusBadge = isConn
+     ? badge(w.status)
+     : `<span class="atom-badge atom-badge--unknown">Último: ${escapeHtml((w.status || "desconocido"))} · Desconectado</span>`;
+  return `<div class="mol-pc-card">
+    <div class="mol-pc-card__head">
+      <span class="mol-pc-card__name">${escapeHtml(w.name)}</span>
+      ${statusBadge}
+    </div>
+    <div class="mol-pc-card__meta">${escapeHtml(hw)} · ${escapeHtml(w.os || "—")}</div>
+    <div class="mol-pc-card__row">
+      <div class="mol-pc-card__stat"><span class="atom-muted">Rend.</span><b>${w.perf ?? "—"}</b></div>
+      <div class="mol-pc-card__stat"><span class="atom-muted">% peso</span><b>${w.weight ?? "—"}</b></div>
+      <div class="mol-pc-card__stat"><span class="atom-muted">Tareas</span><b>${st.tasks}</b></div>
+      <div class="mol-pc-card__stat"><span class="atom-muted">Palabras</span><b>${st.words}</b></div>
+      <div class="mol-pc-card__stat"><span class="atom-muted">Tokens</span><b>${st.tokens}</b></div>
+    </div>
+    <div class="mol-pc-card__actions">
+      <button class="atom-btn atom-btn--primary" data-reconnect="${escapeHtml(w.id)}">Reconectar</button>
+      <button class="atom-btn atom-btn--danger" data-kick="${escapeHtml(w.id)}">Desconectar</button>
+    </div>
+  </div>`;
+}
+
+function bindHistoryActions(box) {
+  box.querySelectorAll("[data-reconnect]").forEach(b =>
+    b.onclick = () => reconnectWorker(b.getAttribute("data-reconnect")));
+  box.querySelectorAll("[data-kick]").forEach(b =>
+    b.onclick = () => kickWorker(b.getAttribute("data-kick")));
+}
+
+async function reconnectWorker(wid) {
+  try {
+    await apiJSON("/api/worker/" + encodeURIComponent(wid) + "/reconnect", "POST");
+    $("status").textContent = "Reconectando " + wid + "…";
+  } catch (e) { alert("Error al reconectar: " + (e.status || "")); }
+}
+
+async function kickWorker(wid) {
+  if (!confirm("¿Desconectar el worker " + wid + "?")) return;
+  try { await apiJSON("/api/worker/" + encodeURIComponent(wid) + "/kick", "POST"); refresh(); }
+  catch (e) { alert("Error al desconectar: " + (e.status || "")); }
+}
+
+function subtaskRowHtml(tid, sid, s, withOutput = true, withActions = false) {
+  const files = (s.files || []).join(", ");
+  const out = (withOutput && s.output)
+    ? `<div class="atom-pre">${escapeHtml(s.output)}</div>` : "";
+  let actions = "";
+  if (withActions) {
+    const isTerminal = ["done", "failed", "canceled"].includes(s.status);
+    // Siempre mostrar conversación; cancel/retry/delegate solo en subtareas activas
+    let actionBtns = `<button class="atom-btn atom-btn--primary" data-view-sub-conv="${escapeHtml(tid)}|${escapeHtml(sid)}">💬 Ver conversación</button>`;
+    if (!isTerminal) {
+      const others = state.workers.filter(w => w.id !== s.worker);
+      const opts = others.map(w =>
+        `<option value="${escapeHtml(w.id)}">${escapeHtml(w.name)} (${escapeHtml(w.id)})</option>`).join("");
+      actionBtns += `
+      <button class="atom-btn atom-btn--danger" data-cancel-sub="${escapeHtml(tid)}|${escapeHtml(sid)}">Cancelar</button>
+      <button class="atom-btn atom-btn--ghost" data-retry-sub="${escapeHtml(tid)}|${escapeHtml(sid)}">Reintentar</button>
+      <select class="atom-select" data-delegate-sel="${escapeHtml(tid)}|${escapeHtml(sid)}">${opts || '<option value="">—</option>'}</select>
+      <button class="atom-btn atom-btn--primary" data-delegate-sub="${escapeHtml(tid)}|${escapeHtml(sid)}">Delegar a PC</button>`;
+    }
+    actions = `<div class="mol-subtask-actions" style="margin-top:var(--space-2); display:flex; gap:var(--space-2); flex-wrap:wrap; align-items:center">
+      ${actionBtns}
+    </div>`;
+  }
+  return `<div class="mol-subtask-row">
+    <div class="mol-subtask-row__head">
+      <span class="mol-subtask-row__files">[${escapeHtml(files)}]</span>
+      ${badge(s.status)}
+    </div>
+    ${s.file_prompt ? `<div class="atom-muted" style="margin-top:var(--space-1)"><b>Sub-prompt:</b> ${escapeHtml(s.file_prompt)}</div>` : ""}
+    ${out}
+    ${actions}
+  </div>`;
+}
+
+// ----------------------------- ORGANISMOS: vistas -------------------------
+function renderWorkers() {
+  const box = $("worker-list");
+  if (!state.workers.length) { box.innerHTML = `<p class="atom-muted">Sin workers conectados.</p>`; }
+  else {
+    box.innerHTML = state.workers.map(pcCardHtml).join("");
+    box.querySelectorAll("[data-drill]").forEach(c =>
+      c.onclick = (e) => {
+        if (e.target.closest("[data-leader]")) return;
+        openWorkerConsole(c.getAttribute("data-drill"));
+      });
+    box.querySelectorAll("[data-leader]").forEach(b =>
+      b.onclick = () => setPrincipal(b.getAttribute("data-leader")));
+  }
+  renderHistoryEmbedded();
+}
+
+function renderHistoryEmbedded() {
+  const box = $("history-list-embedded");
+  if (!box) return;
+  const entries = state.worker_memory || [];
+  if (!entries.length) { box.innerHTML = `<p class="atom-muted">Aún no se ha visto ningún worker.</p>`; return; }
+  box.innerHTML = entries.map(w => pcCardStaticHtml(w, w.connected)).join("");
+  bindHistoryActions(box);
+}
+
+function drillPc(wid) {
+  const w = state.workers.find(x => x.id === wid);
+  const wname = w ? w.name : wid;
+  const tid = w ? w.task_id : null;
+  const t = state.tasks.find(x => x.id === tid);
+  let body;
+  if (!t) {
+    body = `<p class="atom-muted">Esta PC no tiene una tarea activa.</p>`;
+  } else {
+    const subEntries = Object.entries(t.subtasks || {}).filter(([sid, s]) => s.worker === wid);
+    const activeSid = (t.active || {})[wid];
+    body = `<p class="atom-muted">Tarea <b>${escapeHtml(t.id)}</b> · ${escapeHtml(t.status)}</p>
+      <div class="atom-pre">${escapeHtml(t.prompt)}</div>
+      ${activeSid ? `<h3 style="margin:var(--space-3) 0 var(--space-1)">Subtarea activa</h3>` + subtaskRowHtml(t.id, activeSid, t.subtasks[activeSid], true, true) : ""}
+      <h3 style="margin:var(--space-3) 0 var(--space-1)">Todas las subtareas de esta PC (${subEntries.length})</h3>
+      ${subEntries.length ? subEntries.map(([sid, s]) => subtaskRowHtml(t.id, sid, s, true, true)).join("") : '<p class="atom-muted">Sin subtareas asignadas.</p>'}`;
+  }
+  openModal("PC: " + escapeHtml(wname), body);
+}
+
+  // ----------------------------- Historial de tareas -----------------------------
+  function renderTaskHistory() {
+    const box = $("taskhistory-list");
+    const all = state.tasks.slice().reverse();
+    if (!all.length) { box.innerHTML = `<p class="atom-muted">Sin tareas en el historial.</p>`; return; }
+    box.innerHTML = all.map(historyTaskHtml).join("");
+    bindTaskHistory();
+  }
+  function historyTaskHtml(t) {
+    const stCls = t.status === "done" ? "atom-badge--ok"
+      : (t.status === "canceled" || t.status === "failed") ? "atom-badge--down"
+      : "atom-badge--busy";
+    const subs = Object.entries(t.subtasks || {});
+    const subHtml = subs.length
+      ? subs.map(([sid, s]) => `<div class="mol-subtask-row" style="margin-top:var(--space-1)">
+          <span class="mol-subtask-row__files">[${escapeHtml((s.files || []).join(", "))}]</span> ${badge(s.status)}
+          <span class="atom-muted">· PC: ${escapeHtml(s.worker || "—")}</span>
+          <button class="atom-btn atom-btn--primary" style="margin-left:var(--space-2)" data-view-hist-conv="${escapeHtml(t.id)}|${escapeHtml(sid)}">💬</button>
+          </div>`).join("")
+      : '<span class="atom-muted">sin subtareas</span>';
+    return `<div class="org-task-card" data-expand="${escapeHtml(t.id)}">
+      <div class="org-task-card__head">
+        <span class="org-task-card__title">${escapeHtml(t.id)}</span>
+        <span class="atom-badge ${stCls}">${escapeHtml(t.status)}</span>
+        <button class="atom-btn atom-btn--primary" data-view-hist-conv="${escapeHtml(t.id)}">💬 Ver conversación</button>
+        <button class="atom-btn atom-btn--danger" data-del-task="${escapeHtml(t.id)}">Eliminar</button>
+      </div>
+      <div class="atom-muted">Líder: ${escapeHtml(t.principal || "—")} · ${escapeHtml(t.created_at || "")}</div>
+      <div class="atom-pre">${escapeHtml(t.prompt)}</div>
+      <div class="mol-subtasks" id="subs-${escapeHtml(t.id)}" hidden>${subHtml}</div>
+    </div>`;
+  }
+  function bindTaskHistory() {
+    $("taskhistory-list").querySelectorAll("[data-expand]").forEach(el =>
+      el.onclick = (e) => {
+        if (e.target.closest("[data-del-task]") || e.target.closest("[data-view-hist-conv]")) return;
+        const id = el.getAttribute("data-expand");
+        const panel = $("subs-" + id);
+        if (panel) panel.hidden = !panel.hidden;
+      });
+    $("taskhistory-list").querySelectorAll("[data-del-task]").forEach(b =>
+      b.onclick = async () => {
+        if (!confirm("¿Eliminar la tarea " + b.getAttribute("data-del-task") + "?")) return;
+        try { await apiJSON("/api/task/" + b.getAttribute("data-del-task") + "/delete", "POST"); refresh(); }
+        catch (e) { alert("Error al eliminar: " + (e.status || "")); }
+      });
+    $("taskhistory-list").querySelectorAll("[data-view-hist-conv]").forEach(b =>
+      b.onclick = () => {
+        const raw = b.getAttribute("data-view-hist-conv");
+        const parts = raw.split("|");
+        if (parts.length === 2) {
+          showConversation(parts[0], parts[1]);
+        } else {
+          showConversation(parts[0]);
+        }
+      });
+  }
+
+  // ----------------------------- Acciones de tareas / subtareas -----------------------------
+  async function cancelTask(tid) {
+    try { await apiJSON("/api/task/" + tid + "/cancel", "POST"); refresh(); }
+    catch (e) { alert("Error al cancelar: " + (e.status || "")); }
+  }
+  async function retryTask(tid) {
+    try { await apiJSON("/api/task/" + tid + "/retry", "POST"); refresh(); }
+    catch (e) { alert("Error al reintentar: " + (e.status || "")); }
+  }
+  async function cancelSub(tid, sid) {
+    try { await apiJSON(`/api/task/${tid}/subtask/${sid}/cancel`, "POST"); refresh(); }
+    catch (e) { alert("Error al cancelar subtarea: " + (e.status || "")); }
+  }
+  async function retrySub(tid, sid) {
+    try { await apiJSON(`/api/task/${tid}/subtask/${sid}/retry`, "POST"); refresh(); }
+    catch (e) { alert("Error al reintentar subtarea: " + (e.status || "")); }
+  }
+  async function delegateSub(tid, sid, to_wid) {
+    try { await apiJSON(`/api/task/${tid}/subtask/${sid}/delegate`, "POST", { to_wid }); refresh(); }
+    catch (e) { alert("Error al delegar: " + (e.status || "")); }
+  }
+
+let pctMap = {};
+function sendSubset() {
+  const checked = [...document.querySelectorAll('input[name="send-workers"]:checked')].map(e => e.value);
+  return checked.length ? checked : state.workers.map(w => w.id);
+}
+function initPct() {
+  const subs = sendSubset();
+  pctMap = {};
+  const each = Math.floor(100 / subs.length);
+  let rem = 100 - each * subs.length;
+  subs.forEach((id, i) => { pctMap[id] = each + (i < rem ? 1 : 0); });
+}
+function recomputePct(setPc, val) {
+  pctMap[setPc] = val;
+  const others = sendSubset().filter(id => id !== setPc);
+  const rest = 100 - val;
+  if (others.length === 0) return;
+  const each = Math.floor(rest / others.length);
+  let rem = rest - each * others.length;
+  others.forEach((id, i) => { pctMap[id] = each + (i < rem ? 1 : 0); });
+}
+function renderPercent() {
+  const box = $("send-percent");
+  if ($("send-mode").value !== "percent") { box.hidden = true; return; }
+  box.hidden = false;
+  const subs = sendSubset();
+  if (!subs.every(id => id in pctMap) || subs.length !== Object.keys(pctMap).length) initPct();
+  $("send-percent-rows").innerHTML = subs.map(id => {
+    const w = state.workers.find(x => x.id === id) || { name: id };
+    return `<div class="org-pct-row">
+      <span class="org-pct-name">${escapeHtml(w.name)}</span>
+      <input class="atom-input org-pct-input" type="number" min="0" max="100" data-pct="${escapeHtml(id)}" value="${pctMap[id] ?? 0}" style="width:70px"> %
+    </div>`;
+  }).join("");
+  $("send-percent-total").textContent = Object.values(pctMap).reduce((a, b) => a + (+b || 0), 0) + "%";
+  document.querySelectorAll('input[data-pct]').forEach(inp => {
+    inp.oninput = () => {
+      const id = inp.getAttribute("data-pct");
+      const v = Math.max(0, Math.min(100, parseInt(inp.value || "0", 10) || 0));
+      recomputePct(id, v);
+      renderPercent();
+    };
+  });
+}
+
+function renderSend() {
+  const lead = $("send-leader");
+  const workersBox = $("send-workers");
+  if (!state.workers.length) {
+    lead.innerHTML = `<option value="">Sin PCs disponibles</option>`;
+    workersBox.innerHTML = `<span class="atom-muted">Sin PCs disponibles.</span>`;
+    return;
+  }
+  // Planificador preseleccionado: Carlos Code (C3) planifica y reparte cuando
+  // está disponible; si no, cae a la PC con mayor perf (la líder también trabaja).
+  const cc = state.carlos_code && state.carlos_code.available;
+  const ccStatus = $("send-cc-status");
+  if (ccStatus) {
+    ccStatus.textContent = cc
+      ? "✓ Carlos Code (C3) conectado — planificará y repartirá esta tarea."
+      : "⚠ Carlos Code (C3) no responde — el líder elegido planificará solo.";
+  }
+  let best = state.workers[0];
+  for (const w of state.workers) if ((w.perf ?? -1) > (best.perf ?? -1)) best = w;
+  const prevLeader = lead.value;
+  const leaderVal = prevLeader && ((prevLeader === "auto" && cc) || state.workers.some(w => w.id === prevLeader))
+    ? prevLeader : cc ? "auto" : best.id;
+  // Solo en la primera carga marcamos todas las PCs; luego respetamos al usuario.
+  const prevWorkers = new Set(
+    [...document.querySelectorAll('input[name="send-workers"]:checked')].map(e => e.value));
+  const ccOpt = cc
+    ? `<option value="auto"${leaderVal === "auto" ? " selected" : ""}>Carlos Code (C3) — planifica y reparte</option>`
+    : `<option value="auto" disabled>Carlos Code (C3) no disponible</option>`;
+  lead.innerHTML = ccOpt + state.workers.map(w =>
+    `<option value="${escapeHtml(w.id)}"${w.id === leaderVal ? " selected" : ""}>${escapeHtml(w.name)}</option>`).join("");
+  workersBox.innerHTML = state.workers.map(w => {
+    const checked = !sendPopulated || prevWorkers.has(w.id);
+    return `<label><input type="checkbox" name="send-workers" value="${escapeHtml(w.id)}"${checked ? " checked" : ""}> ${escapeHtml(w.name)}</label>`;
+  }).join("");
+  workersBox.querySelectorAll('input[name="send-workers"]').forEach(cb => { cb.onchange = renderPercent; });
+  sendPopulated = true;
+  renderPercent();
+  loadSendSections();
+  renderSendTasks();
+  renderSendSubs();
+}
+
+// Section selector for view-send: options from GET /api/c3/sections,
+// selected = active or last. Change -> POST /api/c3/sections/select.
+// NOTE: /api/task stores section_id for traceability only; the planner
+// path ignores it (see api_task in server.py).
+async function loadSendSections() {
+  const sel = $("send-section");
+  const status = $("send-section-status");
+  if (!sel) return;
+  const prev = sel.value || (typeof ccSectionId !== "undefined" ? ccSectionId : "");
+  try {
+    const d = await apiJSON("/api/c3/sections");
+    const secs = d.sections || [];
+    const fallback = d.active || (secs.length ? secs[secs.length - 1].id : "");
+    const current = (prev && secs.some(s => s.id === prev)) ? prev : fallback;
+    sel.innerHTML = `<option value="">(misma que la consola)</option>` + secs.map(s =>
+      `<option value="${escapeHtml(s.id)}"${s.id === current ? " selected" : ""}>${escapeHtml(s.title || s.id)}${s.id === d.active ? " *" : ""}</option>`).join("");
+    if (current) sel.value = current;
+    if (status) status.textContent = secs.length ? "" : "Sin secciones en C3.";
+  } catch (e) {
+    if (status) status.textContent = "No se pudo listar secciones C3.";
+  }
+  sel.onchange = async () => {
+    const id = sel.value;
+    if (!id) return; // "(misma que la consola)": no need to select on C3
+    try {
+      await apiJSON("/api/c3/sections/select", "POST", { section_id: id });
+      ccSetSectionId(id);
+    } catch (e) { /* keep local choice; console stays authoritative */ }
+  };
+}
+
+async function sendTask() {
+  const prompt = $("send-prompt").value.trim();
+  if (!prompt) { alert("Escribe un prompt."); return; }
+  const principal = $("send-leader").value;
+  const mode = $("send-mode").value;
+  const workers = [...document.querySelectorAll('input[name="send-workers"]:checked')].map(e => e.value);
+  const sectionEl = $("send-section");
+  const section_id = (sectionEl && sectionEl.value) || (typeof ccSectionId !== "undefined" ? ccSectionId : "");
+  // El flujo manda a la vista Carlos Code; si se eligió otra sección, C3
+  // cierra la actual y abre la enviada.
+  if (sectionEl && sectionEl.value && typeof ccSetSectionId === "function") {
+    try {
+      await apiJSON("/api/c3/sections/select", "POST", { section_id: sectionEl.value });
+      ccSetSectionId(sectionEl.value);
+    } catch (e) { /* la tarea igual se envía con section_id */ }
+  }
+  try {
+    const body = { prompt, principal, workers, section_id };
+    if (sendPendingSubs && sendPendingSubs.length) body.subplans = sendPendingSubs;
+    await apiJSON("/api/mode", "POST", { mode });
+    await apiJSON("/api/task", "POST", body);
+    $("send-prompt").value = "";
+    sendPendingSubs = [];
+    renderSendSubs();
+    switchView("carloscode");
+  } catch (e) {
+    alert("Error al enviar: " + (e.status || "") + " " + (e.text || ""));
+  }
+}
+$("send-btn").onclick = sendTask;
+
+// Aprobación del plan en la vista (equivale a /start y /ready de la consola).
+let sendPendingSubs = [];
+function renderSendSubs() {
+  const box = $("send-subplans");
+  const btn = $("send-approve-subs");
+  if (!box) return;
+  if (!sendPendingSubs.length) {
+    box.innerHTML = `<p class="atom-muted">Sin sub-planes: usa "Aprobar plan" para que C3 divida el prompt.</p>`;
+    if (btn) btn.hidden = true;
+    return;
+  }
+  box.innerHTML = sendPendingSubs.map((s, i) =>
+    `<div>${escapeHtml((i + 1) + ". " + s)}</div>`).join("");
+  if (btn) btn.hidden = false;
+}
+async function sendApprovePlan() {
+  const prompt = $("send-prompt").value.trim();
+  if (!prompt) { alert("Escribe un prompt."); return; }
+  const sectionEl = $("send-section");
+  const section_id = (sectionEl && sectionEl.value) || (typeof ccSectionId !== "undefined" ? ccSectionId : "");
+  const box = $("send-subplans");
+  try {
+    if (box) box.innerHTML = `<p class="atom-muted">C3 dividiendo el plan…</p>`;
+    const d = await apiJSON("/api/c3/subplans", "POST", { prompt, section_id });
+    sendPendingSubs = ((d && d.subs) || []).map(s => String(s).trim()).filter(Boolean).slice(0, 8);
+    if (!sendPendingSubs.length) throw new Error("empty");
+  } catch (e) {
+    sendPendingSubs = [];
+    if (box) box.innerHTML = `<p class="atom-muted">C3 no respondió la división.</p>`;
+  }
+  renderSendSubs();
+}
+async function sendApproveSubs() {
+  if (!sendPendingSubs.length) return;
+  await sendTask();
+}
+$("send-approve-plan").onclick = sendApprovePlan;
+$("send-approve-subs").onclick = sendApproveSubs;
+
+function renderSendTasks() {
+  const board = $("send-task-board");
+  if (!board) return;
+  const activeTasks = state.tasks.filter(t => !["done", "canceled", "failed"].includes(t.status));
+  if (!activeTasks.length) { board.innerHTML = `<p class="atom-muted">Sin tareas activas.</p>`; return; }
+  board.innerHTML = activeTasks.slice().reverse().map(taskCardHtml).join("");
+  bindTaskBoard(board);
+}
+
+$("teams-refresh").onclick = async () => {
+  try {
+    await apiJSON("/api/refresh-status", "POST");
+    refresh();
+  } catch (e) {
+    alert("Error al refrescar: " + (e.status || "") + " " + (e.text || ""));
+  }
+};
+
+function renderTasks() {
+  const board = $("task-board");
+  // Filtrar tareas completadas: solo mostrar activas (done/canceled/failed van a Historial)
+  const activeTasks = state.tasks.filter(t => !["done", "canceled", "failed"].includes(t.status));
+  if (!activeTasks.length) { board.innerHTML = `<p class="atom-muted">Sin tareas activas.</p>`; return; }
+  board.innerHTML = activeTasks.slice().reverse().map(taskCardHtml).join("");
+  bindTaskBoard();
+}
+
+function taskCardHtml(t) {
+  const stCls = t.status === "done" ? "atom-badge--ok"
+    : t.status === "failed" ? "atom-badge--down"
+    : t.status === "paused" ? "atom-badge--busy" : "atom-badge--busy";
+  const mode = t.mode_used || "planning";
+  const pcBlocks = (t.workers || []).map(wid => taskPcHtml(t, wid)).join("");
+  const planC3 = t.plan_summary || (t.plan && t.plan.note) || "";
+  const subs = t.subplans || [];
+  // Cola de sub-planes secuenciales: se atenúan los ya completados según
+  // cantidad de subtareas en done (los sub-planes se ejecutan en orden).
+  const doneCount = Object.values(t.subtasks || {}).filter(s => s.status === "done").length;
+  const subsHtml = subs.length
+    ? `<h3 style="margin:var(--space-3) 0 var(--space-1)">Sub-planes de Carlos Code</h3>` +
+      subs.map((s, i) => {
+        const doneItem = t.status === "done" || i < Math.min(doneCount, subs.length);
+        return `<div${doneItem ? ' style="opacity:0.45"' : ""}>${escapeHtml((i + 1) + ". " + s)}</div>`;
+      }).join("")
+    : "";
+  return `<div class="org-task-card">
+    <div class="org-task-card__head">
+      <span class="org-task-card__title">${escapeHtml(t.id)}</span>
+      <span class="atom-badge ${stCls}">${escapeHtml(t.status)}</span>
+      <span class="atom-muted">modo: ${escapeHtml(mode)}</span>
+    </div>
+    <div class="atom-muted">Líder: ${escapeHtml(t.principal || "—")} · PCs: ${escapeHtml((t.workers || []).join(", ") || "—")} · ${escapeHtml(t.created_at || "")}</div>
+    <h3 style="margin:var(--space-3) 0 var(--space-1)">Plan enviado por el usuario</h3>
+    <div class="atom-pre">${escapeHtml(t.prompt)}</div>
+    ${planC3 ? `<h3 style="margin:var(--space-3) 0 var(--space-1)">Plan propuesto por Carlos Code</h3><div class="atom-pre">${escapeHtml(planC3)}</div>` : ""}
+    ${subsHtml}
+    <h3 style="margin:var(--space-3) 0 var(--space-1)">Cómo la líder dividió la tarea</h3>
+    ${pcBlocks || '<p class="atom-muted">Sin PCs en el conjunto.</p>'}
+    <div class="org-task-actions" style="margin-top:var(--space-3); display:flex; gap:var(--space-2); flex-wrap:wrap">
+      ${!["done","canceled","failed"].includes(t.status) ? `
+      <button class="atom-btn atom-btn--danger" data-cancel-task="${escapeHtml(t.id)}">Cancelar tarea</button>
+      <button class="atom-btn atom-btn--ghost" data-retry-task="${escapeHtml(t.id)}">Reintentar</button>` : ""}
+    </div>
+  </div>`;
+}
+
+function taskPcHtml(t, wid) {
+  const w = state.workers.find(x => x.id === wid);
+  const wname = w ? w.name : wid;
+  const idx = (t.workers || []).indexOf(wid);
+  const num = idx >= 0 ? idx + 1 : "?";
+  const pq = (t.pqueues && t.pqueues[wid]) || [];
+  const activeSid = (t.active && t.active[wid]) || null;
+  const subs = Object.values(t.subtasks || {}).filter(s => s.worker === wid);
+  const pendingHtml = pq.length
+    ? pq.map(f => `<div class="mol-pending-file">
+        <span>${escapeHtml(f)}</span>
+        <button class="atom-btn atom-btn--danger" data-reassign="${escapeHtml(t.id)}|${escapeHtml(wid)}|${escapeHtml(f)}">Quitar de la cola</button>
+      </div>`).join("")
+    : `<span class="atom-muted">Sin archivos pendientes.</span>`;
+  const subCount = subs.length;
+  return `<div class="mol-task-pc" data-taskpc="${escapeHtml(t.id)}|${escapeHtml(wid)}">
+    <div class="mol-task-pc__head">
+      <span><b>PC #${num} · ${escapeHtml(wname)}</b> <span class="atom-muted">(${escapeHtml(wid)})</span></span>
+      <span class="atom-muted">${activeSid ? "activa" : "sin activa"} · ${subCount} subtareas · ${pq.length} pendientes</span>
+    </div>
+    <div class="mol-task-pc__pending">${pendingHtml}</div>
+  </div>`;
+}
+
+function bindTaskBoard(board) {
+  board = board || $("task-board");
+  if (!board) return;
+  board.querySelectorAll("[data-taskpc]").forEach(el =>
+    el.onclick = (e) => {
+      if (e.target.closest("[data-reassign]")) return;
+      const [tid, wid] = el.getAttribute("data-taskpc").split("|");
+      drillTaskPc(tid, wid);
+    });
+  board.querySelectorAll("[data-reassign]").forEach(b =>
+    b.onclick = () => {
+      const [tid, wid, file] = b.getAttribute("data-reassign").split("|");
+      reassign(tid, wid, file);
+    });
+  board.querySelectorAll("[data-cancel-task]").forEach(b =>
+    b.onclick = () => cancelTask(b.getAttribute("data-cancel-task")));
+  board.querySelectorAll("[data-retry-task]").forEach(b =>
+    b.onclick = () => retryTask(b.getAttribute("data-retry-task")));
+}
+
+function drillTaskPc(tid, wid) {
+  const t = state.tasks.find(x => x.id === tid);
+  if (!t) return;
+  const w = state.workers.find(x => x.id === wid);
+  const wname = w ? w.name : wid;
+  const idx = (t.workers || []).indexOf(wid);
+  const num = idx >= 0 ? idx + 1 : "?";
+  const subEntries = Object.entries(t.subtasks || {}).filter(([sid, s]) => s.worker === wid);
+  const pq = (t.pqueues && t.pqueues[wid]) || [];
+  const activeSid = (t.active && t.active[wid]) || null;
+  const activeSub = activeSid ? t.subtasks[activeSid] : null;
+  const activeFile = activeSub && (activeSub.files || [])[0];
+
+  const subHtml = subEntries.length
+    ? subEntries.map(([sid, s]) => subtaskRowHtml(t.id, sid, s, true, true)).join("")
+    : `<p class="atom-muted">La líder aún no asignó subtareas a esta PC.</p>`;
+
+  const pqHtml = pq.length
+    ? pq.map(f => `<div class="mol-pending-file">
+        <span>${escapeHtml(f)}</span>
+        <button class="atom-btn atom-btn--danger" data-reassign="${escapeHtml(t.id)}|${escapeHtml(wid)}|${escapeHtml(f)}">Quitar de la cola</button>
+      </div>`).join("")
+    : `<span class="atom-muted">Sin archivos pendientes.</span>`;
+
+  const activeHtml = activeSub
+    ? subtaskRowHtml(t.id, activeSid, activeSub, true, true)
+    : "";
+
+  const body = `<p class="atom-muted">PC #${num} · <b>${escapeHtml(wname)}</b> (${escapeHtml(wid)})</p>
+    <h3 style="margin:var(--space-3) 0 var(--space-1)">Subtareas asignadas (${subEntries.length})</h3>
+    ${subHtml}
+    <h3 style="margin:var(--space-3) 0 var(--space-1)">Cola pendiente (${pq.length})</h3>
+    <div class="mol-task-pc__pending">${pqHtml}</div>
+    <h3 style="margin:var(--space-3) 0 var(--space-1)">Subtarea activa</h3>
+    ${activeHtml || '<p class="atom-muted">Sin subtarea activa.</p>'}`;
+  openModal(`PC #${num} — ${escapeHtml(wname)}`, body);
+  lastDrill = { tid, wid };
+  bindDrillReassign();
+}
+
+// Enlaza botones de reasignación/cancelación que viven dentro del modal.
+function bindDrillReassign() {
+  $("modal-body").querySelectorAll("[data-reassign]").forEach(b =>
+    b.onclick = () => {
+      const [tid, wid, file] = b.getAttribute("data-reassign").split("|");
+      reassign(tid, wid, file);
+    });
+  $("modal-body").querySelectorAll("[data-cancel]").forEach(b =>
+    b.onclick = () => {
+      const [tid, wid, file] = b.getAttribute("data-cancel").split("|");
+      reassign(tid, wid, file);
+    });
+  $("modal-body").querySelectorAll("[data-cancel-sub]").forEach(b =>
+    b.onclick = () => { const [tid, sid] = b.getAttribute("data-cancel-sub").split("|"); cancelSub(tid, sid); });
+  $("modal-body").querySelectorAll("[data-retry-sub]").forEach(b =>
+    b.onclick = () => { const [tid, sid] = b.getAttribute("data-retry-sub").split("|"); retrySub(tid, sid); });
+  $("modal-body").querySelectorAll("[data-delegate-sub]").forEach(b =>
+    b.onclick = () => {
+      const [tid, sid] = b.getAttribute("data-delegate-sub").split("|");
+      const sel = document.querySelector(`[data-delegate-sel="${tid}|${sid}"]`);
+      const to = sel ? sel.value : "";
+      if (to) delegateSub(tid, sid, to);
+    });
+  $("modal-body").querySelectorAll("[data-view-sub-conv]").forEach(b =>
+    b.onclick = () => {
+      const [tid, sid] = b.getAttribute("data-view-sub-conv").split("|");
+      closeModal();
+      showConversation(tid, sid);
+    });
+}
+
+async function reassign(tid, wid, file) {
+  try {
+    const r = await apiJSON("/api/reassign", "POST", { task_id: tid, from_wid: wid, file });
+    await refresh();
+    const msg = "Reasignado → " + (r && r.to_wid ? r.to_wid : "—") +
+      (r && r.canceled ? " (cancelado en origen)" : "");
+    if (!$("modal-root").hidden && lastDrill && lastDrill.tid === tid && lastDrill.wid === wid) {
+      drillTaskPc(tid, wid);
+    }
+    $("status").textContent = msg;
+  } catch (e) {
+    alert("Error al reasignar: " + (e.status || "") + " " + (e.text || ""));
+  }
+}
+
+async function setPrincipal(id) {
+  try { await apiJSON("/api/principal", "POST", { id }); refresh(); }
+  catch (e) { alert("Error: " + (e.status || "") + " " + (e.text || "")); }
+}
+
+function showToast(message, type = 'info') {
+    const toast = document.createElement('div');
+    toast.className = `toast toast-${type}`;
+    toast.textContent = message;
+    document.body.appendChild(toast);
+    setTimeout(() => toast.classList.add('show'), 10);
+    setTimeout(() => {
+        toast.classList.remove('show');
+        setTimeout(() => toast.remove(), 300);
+    }, 3000);
+}
+
+function renderSettings() { /* placeholder view: "Proximamente" */ }
+
+// ----------------------------- VISTA: CONVERSACION -------------------------
+let convBackView = "tasks";
+let convPollTimer = null;  // timer de polling en vivo
+let convCurrentTask = null;  // tarea que se esta viendo
+
+async function showConversation(taskId, subtaskId) {
+  convBackView = subtaskId ? "tasks" : "tasks";
+  convCurrentTask = taskId;
+  $("conv-title").textContent = subtaskId
+    ? `Conversación — Subtarea ${subtaskId}`
+    : `Conversación — Tarea ${taskId}`;
+  $("conv-messages").innerHTML = `<p class="atom-muted">Cargando conversación…</p>`;
+  switchView("conversation");
+
+  // limpiar polling anterior
+  if (convPollTimer) { clearInterval(convPollTimer); convPollTimer = null; }
+
+  async function loadConv() {
+    try {
+      let data;
+      if (subtaskId) {
+        data = await apiJSON(`/api/subtask/${taskId}/${subtaskId}/conversation`);
+      } else {
+        data = await apiJSON(`/api/task/${taskId}/conversation`);
+      }
+      renderConversation(data.conversation || []);
+
+      // parar polling si la tarea termino
+      if (data.status && ["done", "failed", "canceled"].includes(data.status)) {
+        if (convPollTimer) { clearInterval(convPollTimer); convPollTimer = null; }
+      }
+    } catch (e) {
+      $("conv-messages").innerHTML = `<p class="atom-muted">Error al cargar: ${e.status || e.text || ""}</p>`;
+      if (convPollTimer) { clearInterval(convPollTimer); convPollTimer = null; }
+    }
+  }
+
+  await loadConv();
+
+  // polling cada 3s mientras la tarea este activa
+  convPollTimer = setInterval(loadConv, 3000);
+}
+
+function renderConversation(msgs) {
+  const box = $("conv-messages");
+  if (!msgs.length) {
+    box.innerHTML = `<p class="atom-muted">Sin mensajes en esta conversación.</p>`;
+    return;
+  }
+  box.innerHTML = msgs.map((m, i) => {
+    const roleCls = m.role === "user" ? "user" : m.role === "assistant" ? "assistant" : "system";
+    const kindLabel = m.kind === "prompt" ? "Prompt"
+      : m.kind === "plan" ? "Plan"
+      : m.kind === "work-prompt" ? "Instrucción"
+      : m.kind === "work-result" ? "Resultado"
+      : m.kind || "";
+    const statusBadge = m.status ? ` ${badge(m.status)}` : "";
+    const filesInfo = m.files && m.files.length
+      ? `<div class="org-conversation__files">Archivos: ${escapeHtml(m.files.join(", "))}</div>`
+      : "";
+    const pcLabel = escapeHtml(m.pc || "—");
+    const timeStr = m.timestamp ? new Date(m.timestamp).toLocaleString("es-AR") : "";
+    // limpiar ANSI y parsear acciones de OpenCode
+    const clean = stripAnsi(m.content || "");
+    const parsed = parseOpenCodeOutput(clean);
+    return `<div class="org-conversation__msg org-conversation__msg--${roleCls}">
+      <div class="org-conversation__header">
+        <span class="org-conversation__pc">${pcLabel}</span>
+        <span class="org-conversation__kind">${escapeHtml(kindLabel)}</span>
+        ${statusBadge}
+        <span class="org-conversation__time">${escapeHtml(timeStr)}</span>
+      </div>
+      <div class="org-conversation__content">${parsed}</div>
+      ${filesInfo}
+    </div>`;
+  }).join("");
+  // scroll al fondo
+  box.scrollTop = box.scrollHeight;
+}
+
+function stripAnsi(s) {
+  return s
+    .replace(/\x1b\[[0-9;?]*[a-zA-Z]/g, "")
+    .replace(/\x1b[()][AB012]/g, "")
+    .replace(/\r/g, "");
+}
+
+function parseOpenCodeOutput(text) {
+  if (!text) return "";
+  const lines = text.split("\n");
+  let html = "";
+  let inActions = false;
+  for (const line of lines) {
+    const trimmed = line.trim();
+    // detectar acciones de OpenCode
+    if (/^[✱→✗⚙•▶]/.test(trimmed) || /^Glob\s/.test(trimmed) || /^Read\s/.test(trimmed)
+        || /^Grep\s/.test(trimmed) || /^Edit\s/.test(trimmed) || /^Write\s/.test(trimmed)
+        || /^Bash\s/.test(trimmed) || /^Task\s/.test(trimmed)) {
+      if (!inActions) {
+        if (html) html += `<div class="conv-sep"></div>`;
+        html += `<div class="conv-actions">`;
+        inActions = true;
+      }
+      // colorear segun tipo
+      let cls = "conv-action";
+      if (/^[✱]/.test(trimmed) || /^Glob\s/.test(trimmed)) cls += " conv-action--glob";
+      else if (/^[→]/.test(trimmed) || /^Read\s/.test(trimmed)) cls += " conv-action--read";
+      else if (/^[✗]/.test(trimmed)) cls += " conv-action--error";
+      else if (/^[⚙]/.test(trimmed)) cls += " conv-action--tool";
+      html += `<div class="${cls}">${escapeHtml(trimmed)}</div>`;
+    } else {
+      if (inActions) {
+        html += `</div>`;
+        inActions = false;
+      }
+      if (trimmed) {
+        if (html && !html.endsWith("<div class=\"conv-sep\"></div>")) {
+          html += `<div class="conv-sep"></div>`;
+        }
+        html += `<div class="conv-text">${escapeHtml(trimmed)}</div>`;
+      }
+    }
+  }
+  if (inActions) html += `</div>`;
+  return html;
+}
+
+$("conv-back").onclick = () => {
+  if (convPollTimer) { clearInterval(convPollTimer); convPollTimer = null; }
+  convCurrentTask = null;
+  switchView(convBackView);
+};
+
+// ----------------------------- VISTA: DEEPSEEK CHAT -------------------------
+let deepseekMessages = [];
+
+function renderDeepseek() {
+  // Check gateway health
+  checkDeepseekStatus();
+  // Render messages
+  renderDeepseekMessages();
+  // Bind send/clear buttons
+  bindDeepseekEvents();
+}
+
+async function checkDeepseekStatus() {
+  const statusEl = $("ds-status");
+  try {
+    const res = await apiFetch("https://carlos-gateway.onrender.com/health");
+    if (res.ok) {
+      const data = await res.json();
+      statusEl.value = data.auth ? "✅ Conectado (auth OK)" : "⚠️ Conectado (sin auth - ejecuta runner)";
+      statusEl.style.borderColor = data.auth ? "var(--color-success)" : "var(--color-warning)";
+    } else {
+      statusEl.value = "❌ Gateway error " + res.status;
+      statusEl.style.borderColor = "var(--color-danger)";
+    }
+  } catch (e) {
+    statusEl.value = "❌ Gateway inaccesible";
+    statusEl.style.borderColor = "var(--color-danger)";
+  }
+}
+
+function renderDeepseekMessages() {
+  const box = $("ds-messages");
+  if (!deepseekMessages.length) {
+    box.innerHTML = `<p class="atom-muted">Sin mensajes. Escribe abajo para empezar.</p>`;
+    return;
+  }
+  box.innerHTML = deepseekMessages.map(m =>
+    `<div class="org-conversation__msg org-conversation__msg--${m.role === "user" ? "user" : "assistant"}">
+      <div class="org-conversation__header">
+        <span class="org-conversation__pc">${m.role === "user" ? "Tú" : "DeepSeek"}</span>
+        <span class="org-conversation__time">${new Date(m.ts).toLocaleTimeString()}</span>
+      </div>
+      <div class="org-conversation__content">${escapeHtml(m.content)}</div>
+    </div>`
+  ).join("");
+  box.scrollTop = box.scrollHeight;
+}
+
+function bindDeepseekEvents() {
+  // Use a flag to avoid double-binding
+  if ($("ds-send").dataset.bound === "true") return;
+  $("ds-send").dataset.bound = "true";
+
+  $("ds-send").onclick = async () => {
+    const input = $("ds-input");
+    const text = input.value.trim();
+    if (!text) return;
+    input.value = "";
+    input.disabled = true;
+    $("ds-send").disabled = true;
+
+    // Add user message
+    deepseekMessages.push({ role: "user", content: text, ts: Date.now() });
+    renderDeepseekMessages();
+
+    try {
+      const model = $("ds-model").value;
+      const res = await fetch("https://carlos-gateway.onrender.com/v1/chat/completions", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          model,
+          messages: [{ role: "user", content: text }]
+        })
+      });
+      if (!res.ok) throw new Error("HTTP " + res.status);
+      const data = await res.json();
+      const content = data.choices?.[0]?.message?.content || "(sin respuesta)";
+      deepseekMessages.push({ role: "assistant", content, ts: Date.now() });
+      // Guardar en historial
+      await fetch("/api/gateway-history", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          path: "/v1/chat/completions",
+          prompt: text,
+          response_snippet: content?.substring(0, 200) || "",
+          status: res.ok ? 200 : 0,
+          latency_ms: Date.now() - ts,
+          ts: Date.now()
+        })
+      });
+    } catch (e) {
+      deepseekMessages.push({ role: "assistant", content: "❌ Error: " + e.message, ts: Date.now() });
+    }
+    renderDeepseekMessages();
+    input.disabled = false;
+    $("ds-send").disabled = false;
+    input.focus();
+  };
+
+  $("ds-clear").onclick = () => {
+    deepseekMessages = [];
+    renderDeepseekMessages();
+  };
+
+  // Enter to send, Shift+Enter for newline
+  $("ds-input").onkeydown = (e) => {
+    if (e.key === "Enter" && !e.shiftKey) {
+      e.preventDefault();
+      $("ds-send").click();
+    }
+  };
+}
+
+// ----------------------------- CONTROLADOR DE VISTA -----------------------
+function renderActive() {
+  if (currentView === "teams") renderTeams();
+  else if (currentView === "workerconsole") { /* worker console renders via SSE */ }
+  else if (currentView === "send") renderSend();
+  else if (currentView === "tasks") renderTasks();
+  else if (currentView === "taskhistory") renderTaskHistory();
+  else if (currentView === "conversation") { /* conversation already rendered */ }
+  else if (currentView === "settings") renderSettings();
+  else if (currentView === "deepseek") renderDeepseek();
+  else if (currentView === "services") renderServices();
+  else if (currentView === "gw-history") renderGatewayHistory();
+  else if (currentView === "cc-history") renderCarlosHistory();
+}
+
+// ----------------------------- VISTA: SERVICIOS -----------------------------
+function renderServices() {
+  const container = $("servicesContainer");
+  if (!container) return;
+
+  const SERVICES = [
+    { id:'SVC-C1', name:'C1 - Panel Web', icon:'fa-desktop', color:'#2563eb',
+      dashboard:'https://dashboard.render.com/web/srv-da8k36ajnfac73elnneg',
+      healthUrl:'https://bridgecarlos.onrender.com/health',
+      urls:[{label:'Panel',url:'https://bridgecarlos.onrender.com'},{label:'Login',url:'https://bridgecarlos.onrender.com/login'},{label:'/api/state',url:'https://bridgecarlos.onrender.com/api/state'}] },
+    { id:'SVC-C2', name:'C2 - Gateway DeepSeek', icon:'fa-door-open', color:'#7c3aed',
+      dashboard:'https://dashboard.render.com/web/srv-dab7o8cs728c739rt4k0',
+      healthUrl:'https://carlos-gateway.onrender.com/health',
+      urls:[{label:'/health',url:'https://carlos-gateway.onrender.com/health'},{label:'/v1/models',url:'https://carlos-gateway.onrender.com/v1/models'},{label:'/v1/chat',url:'https://carlos-gateway.onrender.com/v1/chat/completions'},{label:'/proxy/ui',url:'https://carlos-gateway.onrender.com/proxy/ui'},{label:'/proxy/status',url:'https://carlos-gateway.onrender.com/proxy/status'},{label:'/proxy/logs',url:'https://carlos-gateway.onrender.com/proxy/logs'}] },
+    { id:'SVC-C3', name:'C3 - Carlos Code', icon:'fa-brain', color:'#f59e0b',
+      dashboard:'https://dashboard.render.com/web/srv-daddt02fngtc738vml80',
+      healthUrl:'https://carlos-code.onrender.com/health',
+      urls:[{label:'/health',url:'https://carlos-code.onrender.com/health'},{label:'/plan',url:'https://carlos-code.onrender.com/plan'},{label:'/tools',url:'https://carlos-code.onrender.com/tools'},{label:'/update',url:'https://carlos-code.onrender.com/update'},{label:'/finalize',url:'https://carlos-code.onrender.com/finalize'},{label:'/git',url:'https://carlos-code.onrender.com/git'}] },
+    { id:'SVC-C4', name:'C4 - Engram MCP', icon:'fa-puzzle-piece', color:'#ec4899',
+      dashboard:'https://dashboard.render.com/web/srv-da9uja142hec7390flu0',
+      healthUrl:'https://engram-mcp-q9ln.onrender.com/health',
+      urls:[{label:'/health',url:'https://engram-mcp-q9ln.onrender.com/health'},{label:'/search',url:'https://engram-mcp-q9ln.onrender.com/search'},{label:'/recent',url:'https://engram-mcp-q9ln.onrender.com/recent'},{label:'/stats',url:'https://engram-mcp-q9ln.onrender.com/stats'}] },
+    { id:'SVC-C5', name:'C5 - Context7+grep', icon:'fa-search', color:'#06b6d4',
+      dashboard:'https://dashboard.render.com/web/srv-da9ujrcs728c73esinj0',
+      healthUrl:'https://context7-grep.onrender.com/health',
+      urls:[{label:'/health',url:'https://context7-grep.onrender.com/health'},{label:'/context7/resolve',url:'https://context7-grep.onrender.com/context7/resolve'},{label:'/context7/docs',url:'https://context7-grep.onrender.com/context7/docs'},{label:'/grep_app/search',url:'https://context7-grep.onrender.com/grep_app/search'},{label:'/search',url:'https://context7-grep.onrender.com/search'}] },
+    { id:'SVC-C6', name:'C6 - Worker Code', icon:'fa-cog', color:'#10b981',
+      dashboard:'https://dashboard.render.com/web/srv-dademueq1p3s73dcd4rg',
+      healthUrl:'https://worker-code.onrender.com/health',
+      urls:[{label:'/health',url:'https://worker-code.onrender.com/health'}] },
+    { id:'SVC-DB', name:'Supabase DB', icon:'fa-database', color:'#059669',
+      dashboard:'https://supabase.com/dashboard/project/qqaocynurdhtmmxktzcz',
+      healthUrl:null,
+      urls:[{label:'Dashboard',url:'https://supabase.com/dashboard/project/qqaocynurdhtmmxktzcz'}] }
+  ];
+
+  async function checkHealth(svc) {
+    if (!svc.healthUrl) return 'active';
+    try { const r = await fetch(svc.healthUrl, {signal:AbortSignal.timeout(5000)}); return r.ok ? 'active' : 'error'; } catch { return 'error'; }
+  }
+
+  async function render() {
+    const states = await Promise.all(SERVICES.map(async s => ({...s, status: s.id === 'SVC-DB' ? (window._dbStage || 'active') : await checkHealth(s)})));
+    container.innerHTML = states.map(s => `
+      <div class="service-card" data-id="${s.id}" onclick="window.open('${s.dashboard}','_blank')" style="cursor:pointer" title="Abrir dashboard">
+        <div class="service-icon" style="background:${s.color}20;color:${s.color}"><i class="fas ${s.icon}"></i></div>
+        <div class="service-content">
+          <h3 class="service-name">${s.name}</h3>
+          <div class="service-chips">${s.urls.map(u => `<a class="service-chip" href="${u.url}" target="_blank" rel="noopener" onclick="event.stopPropagation()">${u.label}</a>`).join('')}</div>
+          <div class="service-footer">
+            <span class="service-status ${s.status}"><i class="fas fa-circle"></i> ${s.status === 'active' ? 'Activo' : 'Error'}</span>
+            <span class="service-id">${s.id}</span>
+          </div>
+        </div>
+      </div>
+    `).join('');
+  }
+  render();
+}
+function loadDbStage() { apiJSON("/api/state").then(d => { window._dbStage = d.db_ok ? 'active' : 'error'; }).catch(() => {}); }
+loadDbStage();
+
+// ─── KEEPALIVE TOGGLE ───
+(function() {
+  const toggle = document.getElementById("keepalive-toggle");
+  const label = document.getElementById("keepalive-label");
+  const statusBox = document.getElementById("keepalive-status");
+  const countdown = document.getElementById("keepalive-countdown");
+  if (!toggle || !label) return;
+
+  let nextPingAt = null;
+  let countdownInterval = null;
+
+  async function loadState() {
+    try {
+      const d = await apiJSON("/api/keepalive");
+      toggle.checked = d.enabled;
+      label.textContent = d.enabled ? "ON" : "OFF";
+      renderStatus(d);
+      if (d.enabled && d.last_run) {
+        const last = new Date(d.last_run).getTime();
+        nextPingAt = last + (d.interval_sec || 300) * 1000;
+        startCountdown();
+      } else {
+        stopCountdown();
+      }
+    } catch(e) {}
+  }
+
+  function startCountdown() {
+    stopCountdown();
+    countdown.style.display = "inline";
+    countdownInterval = setInterval(() => {
+      const now = Date.now();
+      const diff = Math.max(0, nextPingAt - now);
+      const min = Math.floor(diff / 60000);
+      const sec = Math.floor((diff % 60000) / 1000);
+      countdown.textContent = `${min}:${sec.toString().padStart(2, "0")}`;
+      if (diff <= 0) {
+        countdown.textContent = "ping...";
+        setTimeout(loadState, 2000);
+      }
+    }, 1000);
+  }
+
+  function stopCountdown() {
+    if (countdownInterval) clearInterval(countdownInterval);
+    countdown.style.display = "none";
+  }
+
+  function renderStatus(d) {
+    if (!statusBox) return;
+    const svcs = d.services || {};
+    const keys = Object.keys(svcs);
+    if (!keys.length) { statusBox.innerHTML = ""; return; }
+    statusBox.innerHTML = keys.map(id => {
+      const s = svcs[id];
+      const cls = s.status === "ok" ? "ok" : "error";
+      const icon = s.status === "ok" ? "🟢" : "🔴";
+      return `<span class="ka-svc ${cls}">${icon} ${s.name || id} ${s.latency_ms != null ? s.latency_ms+"ms" : ""}</span>`;
+    }).join("");
+  }
+
+  loadState();
+  setInterval(loadState, 30000);
+
+  toggle.addEventListener("change", async () => {
+    const enabled = toggle.checked;
+    label.textContent = enabled ? "ON" : "OFF";
+    try {
+      const res = await fetch("/api/keepalive", {
+        method: "POST",
+        headers: {"Content-Type": "application/json"},
+        credentials: "include",
+        body: JSON.stringify({enabled})
+      });
+      const data = await res.json();
+      if (data.next_run) {
+        nextPingAt = new Date(data.next_run).getTime();
+        if (enabled) startCountdown(); else stopCountdown();
+      } else if (enabled) {
+        // Estimate: last_run + interval
+        const d = await apiJSON("/api/keepalive");
+        if (d.last_run) {
+          nextPingAt = new Date(d.last_run).getTime() + (d.interval_sec || 300) * 1000;
+          startCountdown();
+        }
+      } else {
+        stopCountdown();
+      }
+    } catch(e) {
+      toggle.checked = !enabled;
+      label.textContent = !enabled ? "ON" : "OFF";
+    }
+  });
+})();
+
+// ─── RESOURCES PANEL ───
+(function() {
+  const panel = document.getElementById("resources-panel");
+  const grid = document.getElementById("resources-grid");
+  const refreshBtn = document.getElementById("refreshResourcesBtn");
+  if (!panel || !grid) return;
+
+  async function loadResources() {
+    try {
+      const d = await apiJSON("/api/resources");
+      panel.style.display = "block";
+      const names = {C2:"Gateway",C3:"Carlos Code",C4:"Engram",C5:"Context7",C6:"Worker",DB:"Supabase"};
+      grid.innerHTML = Object.entries(d).map(([k, v]) => {
+        if (v.error) return `<div style="padding:8px 10px;border:1px solid #ef444440;border-radius:8px;font-size:11px;color:#ef4444">🔴 ${names[k]||k}: ${v.error}</div>`;
+        if (v.size_human) {
+          return `<div style="padding:8px 10px;border:1px solid var(--color-border);border-radius:8px;font-size:11px"><b>${names[k]||k}</b><br>📦 ${v.size_human}</div>`;
+        }
+        const ram = v.ram_mb || 0;
+        const total = v.ram_total_mb || 512;
+        const pct = v.ram_pct || 0;
+        const up = v.uptime_sec != null ? `${Math.floor(v.uptime_sec/3600)}h${Math.floor((v.uptime_sec%3600)/60)}m` : "";
+        const color = pct > 80 ? "#ef4444" : pct > 50 ? "#f59e0b" : "#22c55e";
+        return `<div style="padding:8px 10px;border:1px solid var(--color-border);border-radius:8px;font-size:11px">
+          <div style="display:flex;justify-content:space-between"><b>${names[k]||k}</b><span style="color:var(--color-text-muted)">${up}</span></div>
+          <div style="margin-top:4px;background:#333;border-radius:4px;height:8px;overflow:hidden">
+            <div style="width:${Math.min(pct,100)}%;background:${color};height:100%;border-radius:4px"></div>
+          </div>
+          <div style="display:flex;justify-content:space-between;margin-top:2px;color:var(--color-text-muted)">
+            <span>${ram.toFixed(1)} MB</span><span>${pct.toFixed(1)}%</span>
+          </div>
+        </div>`;
+      }).join("");
+    } catch(e) {
+      panel.style.display = "none";
+    }
+  }
+
+  if (refreshBtn) refreshBtn.onclick = loadResources;
+  // Load on services view
+  const observer = new MutationObserver(() => {
+    if (document.getElementById("view-services") && !document.getElementById("view-services").hidden) {
+      loadResources();
+    }
+  });
+  loadResources();
+  setInterval(loadResources, 10000);
+})();
+
+
+// ----------------------------- VISTA: HISTORIAL DEEPSEEK -------------------
+async function renderGatewayHistory() {
+  const box = $("gw-history-list");
+  box.innerHTML = `<p class="atom-muted">Cargando...</p>`;
+  try {
+    const data = await apiJSON("/api/gateway-history?limit=100");
+    const rows = data.rows || [];
+    if (!rows.length) {
+      box.innerHTML = `<p class="atom-muted">Sin historial de DeepSeek.</p>`;
+      return;
+    }
+    box.innerHTML = rows.map(r => {
+      const ts = r.ts ? new Date(r.ts).toLocaleString("es-AR") : "—";
+      const snippet = (r.response_snippet || "").substring(0, 200);
+      return `<div class="org-task-card" style="margin-bottom:var(--space-2)">
+        <div class="org-task-card__head">
+          <span class="org-task-card__title" style="font-size:var(--font-sm)">${escapeHtml(r.path || "/")}</span>
+          <span class="atom-badge ${r.status < 400 ? 'atom-badge--ok' : 'atom-badge--down'}">${r.status || "—"}</span>
+          <span class="atom-muted">${r.latency_ms != null ? r.latency_ms + "ms" : "—"}</span>
+          <span class="atom-muted">${escapeHtml(ts)}</span>
+          <button class="atom-btn atom-btn--danger" data-gw-del="${r.id}">Eliminar</button>
+        </div>
+        <div class="atom-pre" style="max-height:120px">${escapeHtml(r.prompt || "")}</div>
+        ${snippet ? `<div class="atom-muted" style="font-size:var(--font-xs)">${escapeHtml(snippet)}...</div>` : ""}
+      </div>`;
+    }).join("");
+    box.querySelectorAll("[data-gw-del]").forEach(b =>
+      b.onclick = async () => {
+        const id = b.getAttribute("data-gw-del");
+        if (!confirm("Eliminar entrada " + id + "?")) return;
+        try { await apiJSON("/api/gateway-history/" + id, "DELETE"); renderGatewayHistory(); }
+        catch (e) { alert("Error: " + (e.status || "")); }
+      });
+  } catch (e) {
+    box.innerHTML = `<p class="atom-muted">Error al cargar historial.</p>`;
+  }
+}
+
+// ----------------------------- VISTA: HISTORIAL CARLOS CODE ----------------
+async function renderCarlosHistory() {
+  const box = $("cc-history-list");
+  box.innerHTML = `<p class="atom-muted">Cargando...</p>`;
+  try {
+    const data = await apiJSON("/api/carlos-history?limit=100");
+    const rows = data.rows || [];
+    if (!rows.length) {
+      box.innerHTML = `<p class="atom-muted">Sin historial de Carlos Code.</p>`;
+      return;
+    }
+    box.innerHTML = rows.map(r => {
+      const ts = r.ts ? new Date(r.ts).toLocaleString("es-AR") : "—";
+      return `<div class="org-task-card" style="margin-bottom:var(--space-2)">
+        <div class="org-task-card__head">
+          <span class="atom-badge ${r.status === 'ok' ? 'atom-badge--ok' : r.status === 'error' ? 'atom-badge--down' : 'atom-badge--unknown'}">${escapeHtml(r.status || "—")}</span>
+          <span class="atom-muted">${escapeHtml(r.mode || "—")}</span>
+          <span class="atom-muted">${escapeHtml(ts)}</span>
+          <button class="atom-btn atom-btn--danger" data-cc-del="${r.id}">Eliminar</button>
+        </div>
+        <div class="atom-pre" style="max-height:100px">${escapeHtml(r.prompt || "")}</div>
+        ${r.plan_summary ? `<div class="atom-muted" style="font-size:var(--font-xs)">${escapeHtml(r.plan_summary).substring(0, 200)}</div>` : ""}
+        ${r.workers ? `<div class="atom-muted" style="font-size:var(--font-xs)">Workers: ${escapeHtml(r.workers)}</div>` : ""}
+      </div>`;
+    }).join("");
+    box.querySelectorAll("[data-cc-del]").forEach(b =>
+      b.onclick = async () => {
+        const id = b.getAttribute("data-cc-del");
+        if (!confirm("Eliminar entrada " + id + "?")) return;
+        try { await apiJSON("/api/carlos-history/" + id, "DELETE"); renderCarlosHistory(); }
+        catch (e) { alert("Error: " + (e.status || "")); }
+      });
+  } catch (e) {
+    box.innerHTML = `<p class="atom-muted">Error al cargar historial.</p>`;
+  }
+}
+
+// ----------------------------- POLLING (refresh unificado) ----------------
+let pollTimer = null;
+async function refresh() {
+  try {
+    const [st, tk] = await Promise.all([
+      apiJSON("/api/state"),
+      apiJSON("/api/tasks"),
+    ]);
+    state.workers = st.workers || [];
+    state.worker_memory = st.worker_memory || [];
+    state.principal = st.principal;
+    state.mode = st.mode || "percent";
+    state.tasks = (tk && tk.tasks) || [];
+    state.carlos_code = st.carlos_code || null;
+    $("status").textContent = "conectado (polling 3s)";
+    renderActive();
+  } catch (e) {
+    if (e && e.status === 401) { showLogin(); return; }
+    $("status").textContent = "reconectando…";
+  }
+}
+
+// ----------------------------- LOGIN --------------------------------------
+function showLogin() {
+  $("app").hidden = true;
+  $("login-page").hidden = false;
+  $("status").textContent = "no autenticado";
+  if (pollTimer) { clearInterval(pollTimer); pollTimer = null; }
+}
+function showApp() {
+  $("login-page").hidden = true;
+  $("app").hidden = false;
+}
+$("login-form").onsubmit = async (e) => {
+  e.preventDefault();
+  $("login-error").hidden = true;
+  const fd = new FormData();
+  fd.set("user", $("login-user").value);
+  fd.set("password", $("login-pass").value);
+  try {
+    const res = await apiFetch("/login", { method: "POST", body: fd });
+    if (res.ok) {
+      showApp();
+      startPolling();
+    } else {
+      $("login-error").hidden = false;
+    }
+  } catch (err) {
+    $("login-error").hidden = false;
+  }
+};
+
+// ----------------------------- ARRANQUE -----------------------------------
+function startPolling() {
+  refresh();
+  if (pollTimer) clearInterval(pollTimer);
+  pollTimer = setInterval(refresh, 3000);
+}
+// Comprobación inicial: si /api/state devuelve 401, mostramos login.
+(async () => {
+  try {
+    await apiJSON("/api/state");
+    showApp();
+    startPolling();
+  } catch (e) {
+    if (e && e.status === 401) showLogin();
+    else { showLogin(); }
+  }
+})();
+
+// ----------------------------- CARLOS CODE TUI (via /api/c3/* same-origin) ---
+// Text-only TUI: all lines use textContent, never injected HTML. All C3
+// traffic goes through C1 (/api/c3/*, same-origin credentials). No direct C3 fetch.
+const ccTerminal = document.getElementById('cc-terminal');
+const ccInput = document.getElementById('cc-input');
+const ccSendBtn = document.getElementById('cc-send');
+const ccClearBtn = document.getElementById('cc-clear');
+let ccSectionId = "";
+let ccRequestId = null;
+let ccStreaming = false;
+// Persisted C3 section (Bug 3): ccSectionId used to reset on reload and C3
+// created a new section per stream. Every assignment goes through
+// ccSetSectionId, which mirrors the id into localStorage ("cc.sectionId").
+const CC_SECTION_KEY = "cc.sectionId";
+function ccSetSectionId(id) {
+  ccSectionId = id || "";
+  try {
+    if (ccSectionId) localStorage.setItem(CC_SECTION_KEY, ccSectionId);
+    else localStorage.removeItem(CC_SECTION_KEY);
+  } catch (e) { /* private mode: keep in-memory only */ }
+}
+function ccGetSavedSectionId() {
+  try { return localStorage.getItem(CC_SECTION_KEY) || ""; }
+  catch (e) { return ""; }
+}
+let ccTokens = { input: 0, output: 0, total: 0 };
+let ccPendingSections = null;
+let ccPendingStart = null;
+let ccOpenLine = null;
+let ccOpenThinking = null;
+
+function ccLine(text, cls) {
+  const div = document.createElement('div');
+  div.className = 'cc-msg ' + (cls || '');
+  div.style.whiteSpace = 'pre-wrap';
+  div.textContent = text == null ? "" : String(text);
+  ccTerminal.appendChild(div);
+  ccTerminal.scrollTop = ccTerminal.scrollHeight;
+  return div;
+}
+
+function ccSetTokens(input, output, total) {
+  ccTokens = { input: input || 0, output: output || 0, total: total || 0 };
+  const bar = document.getElementById('cc-tokens');
+  if (bar) bar.textContent = 'tokens: in=' + ccTokens.input + ' out=' + ccTokens.output + ' total=' + ccTokens.total;
+  const fill = document.getElementById('cc-tokenbar-fill');
+  if (fill) fill.style.width = Math.min(100, Math.round(ccTokens.total / 8000 * 100)) + '%';
+}
+
+function ccHelp() {
+  ccLine('Comandos C1 (via /api/c3/* mismo origen):', 'cc-system');
+  ccLine('  /sections        — lista secciones; responde numero o id + Enter (OK) para elegir', 'cc-response');
+  ccLine('  /models          — catalogo de modelos C3', 'cc-response');
+  ccLine('  /clear           — limpia consola y vacia la seccion activa en C3', 'cc-response');
+  ccLine('  /commands        — lista herramientas C3 (GET /tools)', 'cc-response');
+  ccLine('  /compact         — compacta la seccion activa en C3', 'cc-response');
+  ccLine('  /start <tarea>   — divide en sub-prompts y pide aprobacion', 'cc-response');
+  ccLine('  /ready           — envia lo aprobado a POST /api/task', 'cc-response');
+  ccLine('  Enter/OK = confirmar · Esc = cancelar stream', 'cc-response');
+}
+
+function ccRenderEvent(event, data) {
+  if (event === 'token') {
+    if (!ccOpenLine) ccOpenLine = ccLine('', 'cc-response');
+    ccOpenLine.textContent += (data && data.delta) || '';
+    ccTerminal.scrollTop = ccTerminal.scrollHeight;
+  } else if (event === 'thinking') {
+    if (!ccOpenThinking) ccOpenThinking = ccLine('thinking... ', 'cc-system');
+    ccOpenThinking.textContent += (data && data.delta) || '';
+    ccTerminal.scrollTop = ccTerminal.scrollHeight;
+  } else if (event === 'tool_call') {
+    const name = (data && (data.name || data.tool)) || 'tool';
+    const args = (data && (data.args || data.input || data.path || '')) || '';
+    ccLine('read(' + name + (args ? ', ' + String(args).slice(0, 160) : '') + ')', 'cc-system');
+  } else if (event === 'engram_query') {
+    const mem = data && (data.memory || data.results || data.observations);
+    const txt = typeof mem === 'string' ? mem.slice(0, 500) : JSON.stringify(mem == null ? data : mem).slice(0, 500);
+    ccLine('engram: ' + txt, 'cc-system');
+  } else if (event === 'tokens') {
+    ccSetTokens(data.input || 0, data.output || 0, data.total || 0);
+    ccLine('tokens: in=' + (data.input || 0) + ' out=' + (data.output || 0) + ' total=' + (data.total || 0), 'cc-system');
+  } else if (event === 'cancelled') {
+    ccLine('[cancelled]', 'cc-error');
+  } else if (event === 'done') {
+    if (data && data.error) ccLine('[done] error: ' + data.error, 'cc-error');
+    else ccLine('[done]', 'cc-system');
+  }
+}
+
+async function ccStream(prompt) {
+  const requestId = 'req-' + Math.random().toString(16).slice(2, 10) + Date.now().toString(16).slice(-4);
+  ccRequestId = requestId;
+  ccStreaming = true;
+  ccOpenLine = null;
+  ccOpenThinking = null;
+  ccLine('stream ' + requestId + ' (Esc cancela)...', 'cc-system');
+  try {
+    const res = await apiFetch('/api/c3/stream', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ prompt: prompt, section_id: ccSectionId, request_id: requestId, model: 'deepseek-chat' }),
+    });
+    if (!res.ok || !res.body) {
+      ccLine('Error stream: HTTP ' + res.status, 'cc-error');
+      ccStreaming = false;
+      return;
+    }
+    const reader = res.body.getReader();
+    const decoder = new TextDecoder();
+    let buf = '';
+    let curEvent = 'token';
+    const flushBlocks = () => {
+      let idx;
+      while ((idx = buf.indexOf('\n\n')) >= 0) {
+        const block = buf.slice(0, idx);
+        buf = buf.slice(idx + 2);
+        let ev = curEvent;
+        let payload = null;
+        for (const ln of block.split('\n')) {
+          if (ln.startsWith('event:')) ev = ln.slice(6).trim();
+          else if (ln.startsWith('data:')) {
+            try { payload = JSON.parse(ln.slice(5).trim()); }
+            catch (e) { payload = { delta: ln.slice(5) }; }
+          }
+        }
+        curEvent = 'token';
+        ccRenderEvent(ev, payload || {});
+        if (ev === 'done' || ev === 'cancelled') {
+          if (payload && payload.section_id) ccSetSectionId(payload.section_id);
+        }
+      }
+    };
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buf += decoder.decode(value, { stream: true });
+      flushBlocks();
+      if (!ccStreaming) { try { reader.cancel(); } catch (e) {} break; }
+    }
+    buf += decoder.decode();
+    flushBlocks();
+  } catch (e) {
+    ccLine('Error de stream: ' + (e && e.message ? e.message : e), 'cc-error');
+  }
+  ccStreaming = false;
+  ccOpenLine = null;
+  ccOpenThinking = null;
+}
+
+async function ccCancelStream() {
+  if (!ccStreaming || !ccRequestId) { ccLine('nada que cancelar.', 'cc-system'); return; }
+  ccStreaming = false;
+  try {
+    await apiJSON('/api/c3/cancel', 'POST', { request_id: ccRequestId });
+    ccLine('[cancel enviado: ' + ccRequestId + ']', 'cc-system');
+  } catch (e) {
+    ccLine('Error al cancelar: ' + (e.status || ''), 'cc-error');
+  }
+}
+
+async function ccCmdSections() {
+  try {
+    const d = await apiJSON('/api/c3/sections');
+    const secs = d.sections || [];
+    if (d.active) ccSetSectionId(d.active);
+    if (!secs.length) { ccLine('sin secciones.', 'cc-system'); return; }
+    ccPendingSections = secs;
+    ccLine('sections (active=*):', 'cc-system');
+    secs.forEach((s, i) => {
+      const mark = (s.id === d.active || s.active) ? '*' : ' ';
+      ccLine('  [' + (i + 1) + ']' + mark + ' id=' + s.id + ' title=' + (s.title || '—') + ' tokens=' + (s.tokens || 0), 'cc-response');
+    });
+    ccLine('responde numero o id + Enter (OK) para elegir.', 'cc-system');
+  } catch (e) {
+    ccLine('Error /sections: ' + (e.status || ''), 'cc-error');
+  }
+}
+
+async function ccChooseSection(sel) {
+  const secs = ccPendingSections || [];
+  let target = null;
+  const n = parseInt(sel, 10);
+  if (!isNaN(n) && n >= 1 && n <= secs.length) target = secs[n - 1];
+  else target = secs.find(s => s.id === sel);
+  if (!target) { ccLine('seleccion invalida: ' + sel, 'cc-error'); return; }
+  try {
+    const d = await apiJSON('/api/c3/sections/select', 'POST', { section_id: target.id });
+    if (d.active) ccSetSectionId(d.active);
+    else if (d.section && d.section.id) ccSetSectionId(d.section.id);
+    else ccSetSectionId(target.id);
+    ccLine('seccion activa: ' + ccSectionId, 'cc-system');
+  } catch (e) {
+    ccLine('Error al elegir seccion: ' + (e.status || ''), 'cc-error');
+  }
+  ccPendingSections = null;
+}
+
+async function ccCmdModels() {
+  try {
+    const d = await apiJSON('/api/c3/models');
+    const list = d.models || (d.data || []).map(m => m.id) || [];
+    ccLine('models:', 'cc-system');
+    list.forEach(m => ccLine('  - ' + m, 'cc-response'));
+  } catch (e) {
+    ccLine('Error /models: ' + (e.status || ''), 'cc-error');
+  }
+}
+
+async function ccCmdClear() {
+  try {
+    await apiJSON('/api/c3/sections/clear', 'POST', { section_id: ccSectionId });
+  } catch (e) {
+    ccLine('aviso: C3 clear fallo (' + (e.status || '') + '), limpio consola igual.', 'cc-error');
+  }
+  ccTerminal.innerHTML = '';
+  ccSetTokens(0, 0, 0);
+  ccPendingSections = null;
+  ccLine('consola limpia.', 'cc-system');
+}
+
+async function ccCmdCommands() {
+  try {
+    const d = await apiJSON('/api/c3/tools');
+    const tools = d.tools || [];
+    ccLine('commands:', 'cc-system');
+    tools.forEach(t => ccLine('  /' + t.name + ' — ' + (t.description || ''), 'cc-response'));
+  } catch (e) {
+    ccLine('Error /commands: ' + (e.status || ''), 'cc-error');
+  }
+}
+
+async function ccCmdCompact() {
+  try {
+    const d = await apiJSON('/api/c3/sections/compact', 'POST', { section_id: ccSectionId });
+    if (d.summary) ccLine('compact: ' + d.summary, 'cc-response');
+    else ccLine('compact: ' + JSON.stringify(d).slice(0, 500), 'cc-response');
+    if (d.tokens != null) ccSetTokens(ccTokens.input, ccTokens.output, d.tokens);
+  } catch (e) {
+    ccLine('Error /compact: ' + (e.status || ''), 'cc-error');
+  }
+}
+
+function ccSplitSubs(text) {
+  let parts = text.split(/\n\s*\n/).map(s => s.trim()).filter(Boolean);
+  if (parts.length <= 1) {
+    parts = text.split(/(?<=[.!?])\s+(?=[A-Z0-9(\[])/).map(s => s.trim()).filter(s => s.length > 2);
+  }
+  return parts.slice(0, 8);
+}
+
+async function ccCmdStart(rest) {
+  if (!rest) { ccLine('uso: /start <tarea>', 'cc-error'); return; }
+  let subs = [];
+  let source = 'c3';
+  try {
+    const d = await apiJSON('/api/c3/subplans', 'POST', { prompt: rest, section_id: ccSectionId });
+    subs = ((d && d.subs) || []).map(s => String(s).trim()).filter(Boolean).slice(0, 8);
+    if (!subs.length) throw new Error('empty subs');
+  } catch (e) {
+    subs = ccSplitSubs(rest);
+    source = 'local';
+  }
+  ccPendingStart = { prompt: rest, subs: subs, source: source };
+  const label = source === 'c3'
+    ? 'plan C3 (' + subs.length + ' sub-prompts)'
+    : 'plan local (' + subs.length + ' sub-prompts)';
+  ccLine(label + ' — responde /ready u OK para enviar a /api/task:', 'cc-system');
+  subs.forEach((s, i) => ccLine('  ' + (i + 1) + '. ' + s, 'cc-response'));
+}
+
+async function ccCmdReady() {
+  const pending = ccPendingStart;
+  if (!pending) { ccLine('nada pendiente: usa /start <tarea> primero.', 'cc-error'); return; }
+  try {
+    const workers = (state.workers || []).map(w => w.id);
+    const d = await apiJSON('/api/task', 'POST', { prompt: pending.prompt, principal: 'auto', workers: workers, subplans: pending.subs || [] });
+    ccLine('task enviada: id=' + (d.task_id || '?') + ' status=' + (d.status || '?'), 'cc-system');
+    ccPendingStart = null;
+  } catch (e) {
+    ccLine('Error /ready: ' + (e.status || '') + ' ' + (e.text || ''), 'cc-error');
+  }
+}
+
+async function ccSend() {
+  const text = ccInput.value.trim();
+  if (!text) {
+    // Enter/OK con linea vacia confirma pendientes (OK permanente = Enter).
+    if (ccPendingSections && ccPendingSections.length === 1) { ccChooseSection('1'); return; }
+    if (ccPendingStart) { ccCmdReady(); return; }
+    return;
+  }
+  ccInput.value = '';
+  ccLine('visitor@carlos:~$ ' + text, 'cc-user');
+
+  // Pending section choice takes precedence (numero/id u OK).
+  if (ccPendingSections) {
+    if (text.toLowerCase() === 'ok' && ccPendingSections.length === 1) { ccChooseSection('1'); return; }
+    await ccChooseSection(text);
+    return;
+  }
+  if (text.toLowerCase() === 'ok' && ccPendingStart) { await ccCmdReady(); return; }
+
+  if (text === '/help') { ccHelp(); return; }
+  if (text === '/sections' || text === '/seccions') { await ccCmdSections(); return; }
+  if (text === '/models') { await ccCmdModels(); return; }
+  if (text === '/clear') { await ccCmdClear(); return; }
+  if (text === '/commands') { await ccCmdCommands(); return; }
+  if (text === '/compact') { await ccCmdCompact(); return; }
+  if (text === '/ready') { await ccCmdReady(); return; }
+  if (text === '/start' || text.startsWith('/start ')) { await ccCmdStart(text.slice(6).trim()); return; }
+  if (text.startsWith('/')) { ccLine('comando desconocido. /help para ayuda.', 'cc-error'); return; }
+
+  // Regular prompt -> C3 SSE stream via C1 proxy.
+  if (ccStreaming) { ccLine('stream en curso: Esc para cancelar.', 'cc-error'); return; }
+  await ccStream(text);
+}
+
+if (ccSendBtn) ccSendBtn.addEventListener('click', ccSend);
+if (ccInput) ccInput.addEventListener('keydown', (e) => {
+  if (e.key === 'Enter') ccSend(); // OK permanente = Enter
+  else if (e.key === 'Escape') ccCancelStream(); // Esc = cancela stream
+});
+if (ccClearBtn) ccClearBtn.addEventListener('click', () => {
+  ccTerminal.innerHTML = '';
+  ccSetTokens(0, 0, 0);
+  ccLine('consola limpia.', 'cc-system');
+});
+
+// Restore persisted C3 section on console load (Bug 3): if an id was saved,
+// re-select it; on failure (404) fall back to active/first, else leave empty
+// so the next stream creates one.
+let ccRestored = false;
+async function ccRestoreSection() {
+  if (ccRestored) return;
+  ccRestored = true;
+  const saved = ccGetSavedSectionId();
+  if (!saved) return; // fresh console: next stream creates the section
+  try {
+    const d = await apiJSON('/api/c3/sections/select', 'POST', { section_id: saved });
+    ccSetSectionId((d && d.active) || (d && d.section && d.section.id) || saved);
+    ccLine('sección restaurada: ' + ccSectionId, 'cc-system');
+  } catch (e) {
+    try {
+      const d = await apiJSON('/api/c3/sections');
+      const secs = (d && d.sections) || [];
+      const pick = (d && d.active) || (secs.length ? secs[0].id : "");
+      ccSetSectionId(pick);
+      ccLine(pick ? 'sección restaurada: ' + pick : 'sección nueva al próximo mensaje.', 'cc-system');
+    } catch (e2) {
+      ccSetSectionId("");
+      ccLine('sección nueva al próximo mensaje.', 'cc-system');
+    }
+  }
+}
+ccRestoreSection();
+
+// ----------------------------- WORKER CONSOLE (una por worker_code) ---
+// Text-only TUI: all lines use textContent, never injected HTML. All traffic
+// goes through C1 (/api/worker/:id/*, same-origin credentials). Enter = OK,
+// Esc = cancela el stream (cierra EventSource).
+let wconsoleWorkerId = null;
+let wconsoleSource = null;
+let wconsoleStreaming = false;
+let wconsoleTokens = { input: 0, output: 0, total: 0 };
+
+function wconsoleLine(text, cls) {
+  const box = $("wconsole-terminal");
+  if (!box) return null;
+  const div = document.createElement("div");
+  div.className = "wconsole-msg " + (cls || "");
+  div.style.whiteSpace = "pre-wrap";
+  div.textContent = text == null ? "" : String(text);
+  box.appendChild(div);
+  box.scrollTop = box.scrollHeight;
+  return div;
+}
+
+function wconsoleSetTokens(input, output, total) {
+  wconsoleTokens = { input: input || 0, output: output || 0, total: total || 0 };
+  const bar = $("wconsole-tokens");
+  if (bar) bar.textContent = "tokens: in=" + wconsoleTokens.input + " out=" + wconsoleTokens.output + " total=" + wconsoleTokens.total;
+  const fill = $("wconsole-tokenbar-fill");
+  if (fill) fill.style.width = Math.min(100, Math.round(wconsoleTokens.total / 8000 * 100)) + "%";
+}
+
+function wconsoleCloseStream() {
+  wconsoleStreaming = false;
+  if (wconsoleSource) { try { wconsoleSource.close(); } catch (e) {} wconsoleSource = null; }
+}
+
+function wconsoleRenderEvent(event, data) {
+  if (event === "thinking") {
+    const d = (data && (data.delta || data.task_id)) || data;
+    wconsoleLine("thinking: " + (typeof d === "string" ? d : JSON.stringify(d).slice(0, 300)), "wconsole-system");
+  } else if (event === "preparing_write") {
+    wconsoleLine("preparing_write: " + ((data && data.file) || JSON.stringify(data).slice(0, 200)), "wconsole-system");
+  } else if (event === "tokens") {
+    const t = (data && (data.total || data.tokens)) || 0;
+    if (typeof t === "number" && t > 0) wconsoleSetTokens(wconsoleTokens.input, wconsoleTokens.output, t);
+    const txt = typeof data === "string" ? data.slice(-500) : JSON.stringify(data).slice(0, 500);
+    wconsoleLine("tokens: " + txt, "wconsole-system");
+  } else if (event === "token") {
+    wconsoleLine(String((data && data.delta) || ""), "wconsole-response");
+  } else if (event === "done") {
+    if (data && data.error) wconsoleLine("[done] error: " + data.error, "wconsole-error");
+    else wconsoleLine("[done]", "wconsole-system");
+  }
+}
+
+function openWorkerConsole(wid) {
+  wconsoleCloseStream();
+  wconsoleWorkerId = wid;
+  const w = state.workers.find(x => x.id === wid);
+  $("wconsole-title").textContent = (w ? w.name : wid) + " (" + wid + ")";
+  $("wconsole-terminal").innerHTML = "";
+  wconsoleSetTokens(0, 0, 0);
+  wconsoleLine("consola " + wid + " (Esc cancela)...", "wconsole-system");
+  switchView("workerconsole");
+  try {
+    const src = new EventSource("/api/worker/" + encodeURIComponent(wid) + "/console/stream");
+    wconsoleSource = src;
+    wconsoleStreaming = true;
+    src.addEventListener("thinking", (e) => { try { wconsoleRenderEvent("thinking", JSON.parse(e.data)); } catch (err) { wconsoleRenderEvent("thinking", e.data); } });
+    src.addEventListener("preparing_write", (e) => { try { wconsoleRenderEvent("preparing_write", JSON.parse(e.data)); } catch (err) { wconsoleRenderEvent("preparing_write", e.data); } });
+    src.addEventListener("tokens", (e) => { try { wconsoleRenderEvent("tokens", JSON.parse(e.data)); } catch (err) { wconsoleRenderEvent("tokens", e.data); } });
+    src.addEventListener("done", (e) => { try { wconsoleRenderEvent("done", JSON.parse(e.data)); } catch (err) { wconsoleRenderEvent("done", e.data); } });
+    src.onmessage = (e) => { try { wconsoleRenderEvent("tokens", JSON.parse(e.data)); } catch (err) { wconsoleRenderEvent("tokens", e.data); } };
+    src.onerror = () => { wconsoleLine("[stream cerrado o worker offline]", "wconsole-error"); wconsoleCloseStream(); };
+  } catch (e) {
+    wconsoleLine("Error al abrir stream: " + (e && e.message ? e.message : e), "wconsole-error");
+  }
+}
+
+async function wconsoleCmdModels() {
+  try {
+    const d = await apiJSON("/api/worker/" + encodeURIComponent(wconsoleWorkerId) + "/models");
+    const list = d.models || [];
+    wconsoleLine("models:", "wconsole-system");
+    list.forEach(m => wconsoleLine("  - " + m, "wconsole-response"));
+  } catch (e) {
+    wconsoleLine("Error /models: " + (e.status || ""), "wconsole-error");
+  }
+}
+
+async function wconsoleCmdClear() {
+  try {
+    await apiJSON("/api/worker/" + encodeURIComponent(wconsoleWorkerId) + "/console/clear", "POST");
+  } catch (e) {
+    wconsoleLine("aviso: clear fallo (" + (e.status || "") + "), limpio consola igual.", "wconsole-error");
+  }
+  $("wconsole-terminal").innerHTML = "";
+  wconsoleSetTokens(0, 0, 0);
+  wconsoleLine("consola limpia.", "wconsole-system");
+}
+
+function wconsoleCmdCommands() {
+  wconsoleLine("commands:", "wconsole-system");
+  wconsoleLine("  /models — lista modelos del worker", "wconsole-response");
+  wconsoleLine("  /clear — limpia la consola y la seccion local", "wconsole-response");
+  wconsoleLine("  /commands — lista comandos disponibles", "wconsole-response");
+}
+
+async function wconsoleSend() {
+  const input = $("wconsole-input");
+  if (!wconsoleWorkerId) { wconsoleLine("sin worker: vuelve a Workers y elige uno.", "wconsole-error"); return; }
+  const text = input.value.trim();
+  if (!text) return;
+  input.value = "";
+  wconsoleLine("visitor@worker:~$ " + text, "wconsole-user");
+  if (text === "/models") { await wconsoleCmdModels(); return; }
+  if (text === "/clear") { await wconsoleCmdClear(); return; }
+  if (text === "/commands") { wconsoleCmdCommands(); return; }
+  if (text.startsWith("/")) { wconsoleLine("comando desconocido. /commands para ayuda.", "wconsole-error"); return; }
+  wconsoleLine("solo comandos: /models /clear /commands (el worker solo recibe sub-prompts de C1).", "wconsole-system");
+}
+
+(function wconsoleBind() {
+  const send = document.getElementById("wconsole-send");
+  const input = document.getElementById("wconsole-input");
+  const clear = document.getElementById("wconsole-clear");
+  const back = document.getElementById("wconsole-back");
+  if (send) send.addEventListener("click", wconsoleSend);
+  if (input) input.addEventListener("keydown", (e) => {
+    if (e.key === "Enter") wconsoleSend(); // OK permanente = Enter
+    else if (e.key === "Escape") { wconsoleCloseStream(); wconsoleLine("[cancelado: stream cerrado]", "wconsole-system"); } // Esc = cancelar
+  });
+  if (clear) clear.addEventListener("click", () => {
+    $("wconsole-terminal").innerHTML = "";
+    wconsoleSetTokens(0, 0, 0);
+    wconsoleLine("consola limpia.", "wconsole-system");
+  });
+  if (back) back.addEventListener("click", () => { wconsoleCloseStream(); switchView("teams"); });
+})();
+
+// Worker console CSS
+const wconsoleStyle = document.createElement("style");
+wconsoleStyle.textContent = `
+.wconsole-msg { margin: 4px 0; padding: 2px 0; }
+.wconsole-user { color: #22d3ee; font-weight: bold; }
+.wconsole-system { color: #f59e0b; font-style: italic; }
+.wconsole-response { color: #a3e635; }
+.wconsole-error { color: #f87171; }
+`;
+document.head.appendChild(wconsoleStyle);
+
+// CC terminal CSS
+const ccStyle = document.createElement('style');
+ccStyle.textContent = `
+.cc-msg { margin: 4px 0; padding: 2px 0; }
+.cc-user { color: #22d3ee; font-weight: bold; }
+.cc-system { color: #f59e0b; font-style: italic; }
+.cc-response { color: #a3e635; }
+.cc-error { color: #f87171; }
+.cc-welcome { color: #7c3aed; }
+`;
+document.head.appendChild(ccStyle);
+</script>
+<script src="js/services.js"></script>
+<script>
+// Permanent OK button: sends the current input (simulates Enter)
+const okBtn = document.getElementById('okBtn');
+const _ccInput2 = document.getElementById('cc-input');
+if (okBtn && _ccInput2) {
+    okBtn.addEventListener('click', () => {
+        const text = _ccInput2.value.trim();
+        if (text) {
+            // Dispatch as if user pressed Enter on the input
+            const event = new Event('keydown', { bubbles: true });
+            event.key = 'Enter';
+            event.code = 'Enter';
+            _ccInput2.dispatchEvent(event);
+        }
+    });
+    // Show the OK button when there's text to send, hide when empty
+    _ccInput2.addEventListener('input', () => {
+        okBtn.style.display = _ccInput2.value.trim() ? 'block' : 'none';
+    });
+    // Initial hide
+    okBtn.style.display = 'none';
+}
+</script>
+</body>
+</html>

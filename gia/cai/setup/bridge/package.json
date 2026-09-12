@@ -1,0 +1,14 @@
+{
+  "name": "opencode-bridge",
+  "version": "1.0.0",
+  "description": "Puente multiplataforma: conecta una PC con OpenCode al panel de control web.",
+  "bin": {
+    "bridge": "./bridge.js"
+  },
+  "scripts": {
+    "start": "node bridge.js start"
+  },
+  "dependencies": {
+    "ws": "^8.18.0"
+  }
+}

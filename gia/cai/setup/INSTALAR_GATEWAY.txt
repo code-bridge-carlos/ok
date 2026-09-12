@@ -1,0 +1,88 @@
+========================================
+INSTALACION CARLOS GATEWAY EN WINDOWS
+========================================
+
+PASO 1: CLONAR SOLO LA CARPETA GATEWAY
+-----------------------------------------
+Abri PowerShell y ejecuta estos comandos:
+
+mkdir carlos-gateway
+cd carlos-gateway
+git init
+git remote add origin https://github.com/1000carlospena-prog/cai.git
+git config core.sparseCheckout true
+echo "control/gateway/" > .git/info/sparse-checkout
+git pull --depth 1 origin main
+cd control\gateway
+
+PASO 2: CORRER EL GATEWAY
+--------------------------
+.\carlos-gateway.exe
+
+PASO 3: ABRIR CHROME PARA INICIAR SESION
+------------------------------------------
+Abrir el navegador en:
+http://localhost:8001/webauth
+
+Haz click en el boton "Iniciar Sesion en DeepSeek".
+Se abre Chrome automaticamente.
+Inicia sesion con tu email y password de DeepSeek.
+Espera a que diga "Sesion iniciada".
+
+PASO 4: VERIFICAR QUE FUNCIONA
+--------------------------------
+En otra ventana de PowerShell, ejecuta:
+
+curl.exe http://localhost:8001/health
+
+PASO 5: PROBAR EL CHAT
+------------------------
+curl.exe -X POST http://localhost:8001/v1/chat/completions -H "Content-Type: application/json" -d '{"model":"deepseek-chat","messages":[{"role":"user","content":"Hola, soy Carlos"}],"stream":false}'
+
+========================================
+BUSCAR CREDENCIALES EN TU PC
+========================================
+
+PASO 1: Buscar el archivo auth-profiles.json
+---------------------------------------------
+Get-ChildItem -Path "C:\" -Recurse -Filter "auth-profiles.json" -ErrorAction SilentlyContinue | Select-Object FullName
+
+PASO 2: Si no lo encuentra, buscar en la carpeta donde ejecutaste el gateway
+-------------------------------------------------------------------------------
+Si ejecutaste el gateway en el Escritorio:
+Get-Content "$env:USERPROFILE\Desktop\control\gateway\auth-profiles.json" -Raw
+
+Si lo ejecutaste en otra carpeta, busca ahi.
+
+PASO 3: Copiar el contenido del archivo
+-----------------------------------------
+Copia todo el resultado que empieza con: {"profiles":{"deepseek":...
+
+========================================
+SUBIR TOKENS A RENDER
+========================================
+
+PASO 1: Ir al dashboard de Render
+-----------------------------------
+https://dashboard.render.com/web/srv-daaev0gn74is73ann6mg
+
+PASO 2: Ir a Environment
+--------------------------
+Click en la pestana "Environment"
+
+PASO 3: Agregar variable
+--------------------------
+Key: AUTH_PROFILES
+Value: (pegar el contenido del Paso 3 anterior)
+
+PASO 4: Save Changes
+----------------------
+Click en "Save Changes"
+
+PASO 5: Redeploy
+------------------
+Click en "Manual Deploy" -> "Deploy latest commit"
+
+========================================
+FIN DE LA INSTALACION
+========================================

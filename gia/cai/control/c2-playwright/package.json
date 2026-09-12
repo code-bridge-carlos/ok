@@ -1,0 +1,23 @@
+{
+  "name": "c2-playwright",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "dependencies": {
+    "playwright": "^1.62.1",
+    "ws": "^8.21.3"
+  },
+  "bin": {
+    "runner-win": "./runner.js"
+  },
+  "devDependencies": {
+    "@yao-pkg/pkg": "^6.22.0"
+  }
+}

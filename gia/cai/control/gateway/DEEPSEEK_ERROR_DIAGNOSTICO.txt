@@ -1,0 +1,132 @@
+==========================================================================
+  DIAGNÓSTICO: ERROR AL LLAMAR A LA API INTERNA DE DEEPSEEK
+  Fecha: 2026-09-01
+  Servicio afectado: Browser Service (Render)
+  Archivo: control/browser_service/main.go  →  executeDeepSeekViaBrowser()
+==========================================================================
+
+¿QUÉ ESTÁBAMOS INTENTANDO HACER?
+--------------------------------------------------------------------
+Llamar a la API interna de DeepSeek (chat.deepseek.com/api/v0/chat/completion)
+desde un navegador headless (chromedp) corriendo en Render, para obtener
+respuestas del modelo "deepseek-chat" sin pagar por la API oficial.
+
+Idea original:
+  1. Abrir un Chrome headless que navegue a chat.deepseek.com.
+  2. Inyectar las cookies y el Bearer token del navegador real del usuario.
+  3. Ejecutar un fetch() desde DENTRO de ese navegador (mismo origen).
+  4. Así DeepSeek nos respondería como si fuéramos el usuario logueado.
+
+
+SÍNTOMA / ERROR
+--------------------------------------------------------------------
+POST /api/deepseek devuelve:
+
+    {"content":"","error":"DeepSeek returned status 0: "}
+    HTTP 502
+
+    Log del servicio:
+    Fetch result: status=0 url= name= body=
+    (status 0, error vacío, sin nombre de excepción)
+
+"Status 0" en fetch() de JS = la petición NUNCA recibió respuesta HTTP.
+Se cortó a nivel de red antes de que el servidor contestara.
+
+
+LOS 4 PROBLEMAS QUE ENCONTRAMOS (EN ORDEN)
+--------------------------------------------------------------------
+1) chromedp.Evaluate NO espera promesas async.
+   El fetch era async, pero chromedp.Evaluate devolvía el Promise sin esperar
+   el resultado → siempre "status 0".
+   SOLUCIÓN: usar cdproto runtime.Evaluate con WithAwaitPromise(true).
+
+2) DeepSeek exige el campo "chat_session_id" en el body JSON.
+   Cuando el fetch SÍ llegó (una sola vez), la API contestó:
+   422 Failed to deserialize ... missing field `chat_session_id`
+   SOLUCIÓN: generar uno con crypto.randomUUID().
+
+3) El resultado de runtime.Evaluate venía como string JSON anidado y no se
+   podía parsear. SOLUCIÓN: devolver objeto en lugar de JSON.stringify.
+
+4) PROBLEMA REAL Y DEFINITIVO (anti-bot): incluso con TODO lo anterior
+   corregido, el fetch vuelve a dar status 0 con error vacío.
+
+
+POR QUÉ PASA (LA CAUSA DE FONDO)
+--------------------------------------------------------------------
+Render corre los servicios en IPs de CENTRO DE DATOS (compartidas y conocidas).
+DeepSeek implementa un sistema anti-robot agresivo:
+
+  - AWS WAF (Web Application Firewall)
+  - "AI Capability Challenge" (challenge que detecta tráfico automatizado)
+  - Prueba de trabajo PoW (header x-ds-pow-response, el "hash" que vimos)
+
+Este sistema hace DOS cosas que nos bloquean:
+
+  a) BLOQUEA IPs de datacenter: las conexiones desde Render se cortan a
+     nivel de red (de ahí el status 0 con error vacío). Es decir, no es que
+     rechace la petición con un código HTTP, es que corta la conexión antes.
+
+  b) VALIDA LA SESIÓN CONTRA LA IP/FINGERPRINT: las cookies y el Bearer
+     token que copiamos del navegador del usuario (su casa, su IP) NO
+     funcionan desde otra IP. Por eso el login page se mostraba siempre,
+     aunque inyectáramos las cookies con network.SetCookie.
+
+EVIDENCIA: la única vez que la petición SÍ llegó a DeepSeek (422) fue una
+fisura puntual. Todos los intentos posteriores (mismo código) volvieron a
+dar status 0. Esto confirma que el bloqueo es por IP/origen, no un bug.
+
+RESUMEN: DeepSeek diseñó este wall para detener exactamente este caso de
+uso (bot desde servidor). No es un bug nuestro que se arregle con código.
+
+
+POR QUÉ EL FLUJO "RELOGIN EN OTRO NAVEGADOR" TAMPOCO FUNCIONA
+--------------------------------------------------------------------
+Se intentó autenticarse a través del Browser Service (headless):
+  - DeepSeek pide CAPTCHA para loguearse.
+  - Aunque no pidiera CAPTCHA, la sesión quedaría atada a la IP del
+    datacenter de Render, y DeepSeek la bloquea igual.
+  - El headless no es interactivo: no se puede ver ni tocar la página.
+
+Por eso el formulario /webauth del gateway pide pegar credenciales
+manualmente. Pero esas credenciales solo sirven desde la IP de origen.
+
+
+OPCIONES REALES (LAS ÚNICAS QUE FUNCIONAN)
+--------------------------------------------------------------------
+1) PROXY EN LA MÁQUINA DEL USUARIO (recomendada si se quiere seguir gratis)
+   - Correr un pequeño proxy local en la PC del usuario, donde está su
+     sesión real logueada, su IP real y sus headers PoW válidos.
+   - El gateway le pide al proxy local, y éste habla con DeepSeek usando la
+     sesión/IP real. Confiable y sin CAPTCHA nuevo (el usuario ya pasó el suyo).
+   - Requisito: que la máquina del usuario esté encendida / tenga el proxy.
+
+2) API OFICIAL PAGADA
+   - Usar app.deepseek.com con una API key real (platform.deepseek.com).
+   - La única forma que funciona de verdad desde un servidor/Render.
+   - Cuesta dinero, pero es estable, sin CAPTCHA, sin PoW, sin WAF.
+   - Por precios actuales deepseek-chat es de los modelos más baratos.
+
+3) INTERMEDIA (mantener el browser service)
+   - No recomendada: el bloqueo por IP de datacenter hace el fetch
+     intermitente (funciona 1 de N veces). Inviable en producción.
+
+
+ARCHIVOS RELACIONADOS
+--------------------------------------------------------------------
+- control/browser_service/main.go    → lógica del fetch dentro del browser
+- control/gateway/main.go            → endpoint /webauth (form de credenciales)
+- control/gateway/DEEPSEEK_ERROR_DIAGNOSTICO.txt  → este documento
+
+
+COMANDOS ÚTILES PARA REPRODUCIR / VER
+--------------------------------------------------------------------
+Probar la llamada:
+  curl -s -X POST https://browser-service-4nff.onrender.com/api/deepseek \
+    -H "Content-Type: application/json" \
+    -d '{"prompt":"hola","bearer_token":"<TOKEN>","cookies":"<COOKIES>","model":"deepseek-chat"}'
+
+Ver logs del servicio (Render):
+  Buscar la línea "Fetch result:" en los logs del Browser Service.
+  status=0 + name/body vacíos = bloqueo de red por WAF/anti-bot.
+==========================================================================

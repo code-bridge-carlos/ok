@@ -1,0 +1,1709 @@
+================================================================================
+                        CAI - CARLOS AI: DOCUMENTACION COMPLETA
+                    "Todo lo que se aprendio del proyecto, de pies a cabeza"
+================================================================================
+Fecha de analisis: 2026-09-09
+Repositorio: github.com/1000carlospena-prog/cai (privado)
+Autor: 1000carlospena-prog (Carlos)
+
+================================================================================
+INDICE
+================================================================================
+1. QUE ES CAI
+2. ARQUITECTURA GENERAL
+3. SERVICIO C1 - PANEL WEB (control/server/)
+4. SERVICIO C2 - GATEWAY DEEPSEEK (control/gateway/)
+5. SERVICIO C3 - CARLOS CODE (control/carlos_code/)
+6. SERVICIO C4 - ENGRAM MCP (control/engram_mcp/)
+7. SERVICIO C5 - CONTEXT7+GREP (control/context7_grep/)
+8. SERVICIO C6 - WORKER CODE (control/worker_code/)
+9. BRIDGE - PUENTE PC LOCAL (control/worker/)
+10. SERVICIOS ADICIONALES (browser_service, c2-playwright, playwright_mcp)
+11. BASE DE DATOS (Supabase/PostgreSQL)
+12. DESPLIEGUE EN RENDER
+13. FLUJO COMPLETO DE UNA TAREA
+14. MECANISMOS DE PERSISTENCIA
+15. SEGURIDAD
+16. PROBLEMAS CONOCIDOS Y LIMITACIONES
+17. ARCHIVOS IMPORTANTES
+18. VARIABLES DE ENTORNO
+19. APRENDIZAJES CLAVE
+20. COMO ARRANCAR LOCALMENTE
+
+
+================================================================================
+1. QUE ES CAI
+================================================================================
+
+CAI (Carlos AI) es un sistema distribuido multi-agente que permite ejecutar
+tareas de programacion en PARALELO usando multiples computadoras (fisicas o
+virtuales). La idea central es:
+
+  - El usuario escribe una tarea en un PANEL WEB (ej: "agregar autenticacion
+    a la API")
+  - Un ORQUESTADOR (llamado "principal" o "lider") recibe la tarea y genera
+    un PLAN dividiendo el trabajo en archivos individuales
+  - Cada ARCHIVO se asigna a una PC TRABAJADORA distinta
+  - Cada PC trabajadora implementa SOLO su archivo (sin conflictos)
+  - Cuando todas terminan, el resultado se consolida
+
+El LLM usado es DeepSeek (deepseek-chat y deepseek-reasoner), pero NO a traves
+de la API oficial de DeepSeek. En su lugar, el gateway HACE SCRAPING de
+chat.deepseek.com usando browser automation (Playwright/chromedp), resuelve
+los desafios Proof-of-Work (PoW) de DeepSeek, y devuelve respuestas en formato
+API-compatible con OpenAI.
+
+El ecosistema completo esta desplegado en RENDER (free tier) con 512MB de RAM
+por servicio, usando Supabase como base de datos PostgreSQL.
+
+El proyecto usa un total de 8+ servicios desplegados en Render, mas workers
+adicionales que se escalan segun la carga.
+
+
+================================================================================
+2. ARQUITECTURA GENERAL
+================================================================================
+
+                    ┌─────────────────────┐
+                    │   USUARIO (Web)     │
+                    │   Panel C1          │
+                    │ bridgecarlos.       │
+                    │ onrender.com        │
+                    └──────────┬──────────┘
+                               │ HTTP Long-Polling
+                               ▼
+                    ┌─────────────────────┐
+                    │  C1 - PANEL WEB     │◄──────────────────────┐
+                    │  (Python/FastAPI)   │                       │
+                    │  Puerto: 8000       │                       │
+                    └──┬──────┬───────┬───┘                       │
+                       │      │       │                           │
+          ┌────────────┘      │       └────────────┐              │
+          ▼                   ▼                    ▼              │
+  ┌──────────────┐   ┌──────────────┐   ┌──────────────┐         │
+  │  C6 - Worker │   │  C6 - Worker │   │  C6 - Worker │         │
+  │  Code (Go)   │   │  Code (Go)   │   │  Code (Go)   │         │
+  │  Puerto:10000│   │  Puerto:10000│   │  Puerto:10000│         │
+  └──────┬───────┘   └──────┬───────┘   └──────┬───────┘         │
+         │                  │                   │                  │
+         └──────────────────┼───────────────────┘                  │
+                            │ HTTP POST                            │
+                            ▼                                      │
+                    ┌─────────────────────┐                       │
+                    │  C3 - CARLOS CODE   │                       │
+                    │  (Go)               │───────────────────────┘
+                    │  Puerto: 8002       │  /api/workers
+                    └──┬──────────┬───────┘
+                       │          │
+          ┌────────────┘          └────────────┐
+          ▼                                    ▼
+  ┌──────────────┐                    ┌──────────────┐
+  │  C2 - GATEWAY│                    │  C4 - ENGRAM │
+  │  (Go)        │                    │  (Python)    │
+  │  Puerto:8080 │                    │  Puerto:8001 │
+  └──────┬───────┘                    └──────────────┘
+         │ HTTP
+         ▼
+  ┌──────────────┐                    ┌──────────────┐
+  │  DeepSeek    │                    │  C5 - CONTEXT│
+  │  chat.deep-  │                    │  (Python)    │
+  │  seek.com    │                    │  Puerto:8003 │
+  └──────────────┘                    └──────────────┘
+
+COMUNICACION ENTRE SERVICIOS:
+
+  C1 (Panel) ──HTTP POST──► C3 (Carlos Code)  — plan, closeout
+  C1 (Panel) ──HTTP GET────► C6 (Workers)     — worker-poll (long-polling)
+  C6 (Workers) ──HTTP POST─► C1 (Panel)        — worker-action (registro, estado, resultado)
+  C3 (Carlos Code) ──HTTP──► C2 (Gateway)      — /v1/chat/completions
+  C3 (Carlos Code) ──HTTP──► C4 (Engram)       — /save (observaciones)
+  C3 (Carlos Code) ──HTTP──► C5 (Context7)     — /tools, /context7/docs
+  C3 (Carlos Code) ──HTTP──► C1 (Panel)        — /api/workers (obtener workers disponibles)
+  C1 (Panel) ──HTTP───────► C4 (Engram)        — keep-alive ping
+  C1 (Panel) ──HTTP───────► Todos              — keep-alive heartbeat cada 5 min
+
+PROTOCOLO DE COMUNICACION:
+
+  NO se usa WebSocket para la comunicacion principal entre C1 y C6 workers.
+  Esto es porque el proxy de Render CORTA conexiones WebSocket a ~20 segundos
+  y ademas mata la conexion cuando el cliente envia frames (como ping/pong).
+
+  En su lugar se usa HTTP LONG-POLLING:
+  - Worker hace GET a /api/worker-poll con timeout=10 segundos
+  - Si hay mensajes en la cola, el servidor los devuelve inmediatamente
+  - Si no hay mensajes, el servidor espera hasta 10 segundos
+  - Al recibir la respuesta, el worker vuelve a hacer GET
+  - Esto crea un ciclo que funciona detras del proxy de Render
+
+  Para el panel web (C1):
+  - El browser hace polling cada 3 segundos a /api/state
+  - Recibe el estado completo: workers, tareas, eventos
+
+
+================================================================================
+3. SERVICIO C1 - PANEL WEB (control/server/)
+================================================================================
+
+ARCHIVOS:
+  - server.py          (~1300+ lineas) — Servidor principal FastAPI
+  - db.py              (~820 lineas)   — Capa de persistencia Supabase
+  - carlos_code_integration.py (~140 lineas) — Integracon con C3
+  - static/index.html  (~1200+ lineas) — Panel web completo
+  - static/js/services.js           — JavaScript del panel
+  - __init__.py
+  - requirements.txt
+  - .env.example
+
+STACK: Python 3.12+, FastAPI, uvicorn, asyncpg, httpx, python-dotenv
+
+3.1. SERVIDOR PRINCIPAL (server.py)
+-------------------------------------
+
+El servidor FastAPI maneja TODO el estado del sistema distribuido:
+
+  VARIABLES GLOBALES EN MEMORIA:
+    workers: Dict[str, Dict]     — Workers conectados (id -> estado)
+    tasks: Dict[str, Dict]       — Tareas (task_id -> estado completo)
+    panel_sockets: set           — WebSockets del panel web activos
+    principal_id: str            — ID de la PC principal/lider
+    mode: str                    — "percent" o "dynamic"
+    current_task: str            — Tarea en ejecucion actual
+    inbox: Dict[str, List]       — Cola de mensajes por worker (para long-poll)
+    worker_memory: Dict          — Ultimo estado conocido de cada worker
+    paused: list                 — Tareas pausadas esperando reanudacion
+
+  TIMEOUTS Y CONSTANTES:
+    HEARTBEAT_INTERVAL = 10      — Segundos entre heartbeats
+    HEARTBEAT_TIMEOUT = 90       — Segundos antes de marcar worker como caido
+    WORKER_TIMEOUT = 60          — Segundos sin poll -> worker caido
+    STUCK_SECONDS = 300          — 5 min sin progreso -> reasignar archivo
+    IDLE_BUSY_S = 300            — 5 min ocupada -> preempcion por idle
+    IDLE_FREE_S = 300            — 5 min libre -> candidata a recibir handoff
+    IDLE_RESP_S = 300            — 5 min sin respuesta -> reasignar toda la tarea
+    SESSION_MAX_AGE = 43200      — 12 horas de duracion de sesion
+
+3.2. AUTENTICACION
+--------------------
+
+El panel usa un sistema de sesiones HMAC firmadas:
+
+  LOGIN:
+    1. GET /login muestra un formulario HTML
+    2. POST /login recibe user + password via form-data
+    3. Compara con PANEL_USER y PANEL_PASSWORD (de env vars)
+    4. Si coincide, crea una session firmada con HMAC-SHA256
+    5. Guarda la session en una cookie HttpOnly: "panel_session"
+    6. La cookie dura 12 horas
+
+  ESTRUCTURA DE LA SESSION:
+    base64(user:expiration) + "." + hmac_sha256(SESSION_SECRET, "user:expiration")
+    
+  VERIFICACION:
+    1. Decodifica base64 para obtener user y expiration
+    2. Verifica que no haya expirado
+    3. Recalcula HMAC y compara con el de la cookie
+    4. Verifica que el usuario sea PANEL_USER
+
+  SEGURIDAD:
+    - La password NUNCA se hardcodea (viene de env PANEL_PASSWORD)
+    - SESSION_SECRET debe ser estable entre reinicios
+    - Se usa secrets.compare_digest para comparacion segura (timing-safe)
+    - Si PANEL_PASSWORD esta vacio, el login FALLA (no permite acceso)
+
+  WORKERS (mecanismo separado):
+    - Los workers se autentican con CONTROL_TOKEN en query string
+    - No usan cookies ni sesiones HTTP
+    - El token se pasa como ?token=... en cada request
+
+3.3. FLUJO DE TAREA (dispatch)
+--------------------------------
+
+Cuando un usuario envia una tarea:
+
+  PASO 1 - RECEPCION:
+    POST /api/task recibe el prompt del usuario
+    - Se crea un task_id (uuid hex 8 chars)
+    - Se guarda el prompt, se marca status="planning"
+    - Si Carlos Code (C3) esta disponible, se envia el plan a C3
+    - Si NO, se envia a la PC principal para que planifique
+
+  PASO 2 - PLANIFICACION:
+    La PC principal (o C3) recibe un prompt con:
+    - El prompt del usuario
+    - La lista de workers disponibles con sus pesos
+    - El modo de reparto (percent o dynamic)
+    
+    La respuesta debe ser un JSON:
+    {
+      "mode": "percent" | "dynamic",
+      "note": "descripcion del plan",
+      "items": [
+        {"file": "src/foo.py", "prompt": "instrucciones especificas"},
+        ...
+      ]
+    }
+    
+    O en modo percent con assignments explicitos:
+    {
+      "mode": "percent",
+      "assignments": {
+        "worker-1": ["archivo1.py", "archivo2.py"],
+        "worker-2": ["archivo3.py"]
+      }
+    }
+
+  PASO 3 - DISTRIBUCION (dispatch_plan):
+    a) MODO PERCENT:
+       - Cada worker recibe un porcentaje del trabajo segun su peso
+       - Los archivos se reparten por enteros (sin dividir archivos)
+       - Cada worker tiene su propia cola (pqueues)
+       - Se usa work-stealing: workers libres roban de la cola mas cargada
+
+    b) MODO DYNAMIC:
+       - Todos los archivos van a una cola global
+       - Cada worker libre toma el siguiente archivo
+       - Mas simple pero menos control sobre la distribucion
+
+  PASO 4 - EJECUCION:
+    - Cada worker recibe UN archivo a la vez
+    - El worker pide al Gateway (C2) que genere el contenido
+    - El Gateway llama a DeepSeek y devuelve la implementacion
+    - El worker escribe el archivo en disco
+    - Reporta resultado a C1 via POST /api/worker-action
+
+  PASO 5 - COMPLETADO:
+    - Cuando todos los subtrabajos terminan, la tarea se marca "done"
+    - Se hace closeout: snapshot a Engram + EMGRAN (GitHub mirror)
+    - Se notifica al panel via WebSocket broadcast
+
+3.4. SISTEMA DE COLAS Y PREEMPCION
+-------------------------------------
+
+Cada worker tiene una COLA DE TAREAS (task_queue). Cuando una tarea nueva
+llega, se pone al frente de la cola de cada worker que participa. Las tareas
+se ejecutan SERIALMENTE por worker: una PC termina la tarea de un lider
+antes de pasar a la de otro.
+
+PREEMPCION:
+  Si una tarea B llega mientras A esta corriendo:
+  1. A se pausa: se cancelan los workers activos
+  2. A se guarda en la lista "paused" (FIFO)
+  3. B se ejecuta con todos los workers
+  4. Cuando B termina, se reanuda A desde donde quedo
+
+REBALANCEO (work-stealing):
+  - Workers libres revisan si hay colas con mas de 1 archivo
+  - Roban el ULTIMO archivo de la cola mas cargada
+  - Se envia un "recall" al worker original para que lo devuelva
+
+TIMEOUT POR STUCK:
+  - Si un archivo lleva mas de STUCK_SECONDS (300s) en un worker
+  - Y hay otro worker libre
+  - Se le pide al worker ocupado que devuelva progreso
+  - Se asigna el archivo al worker libre
+  - Si el worker ocupado no responde, se le pide reiniciar OpenCode
+
+PREEMPCION POR IDLE:
+  - Si un worker lleva IDLE_BUSY_S (300s) ocupado
+  - Y otro lleva IDLE_FREE_S (300s) libre
+  - Se inicia un "handoff": la ocupada devuelve progreso, la libre espera
+  - Si la ocupada no responde en IDLE_RESP_S (300s):
+    - TODA la tarea se reasigna a la libre desde cero
+    - La ocupada se marca como "noncompliant"
+    - Se le envia un "restart" para que reinicie OpenCode
+
+3.5. ENDPOINTS REST COMPLETOS
+
+  GET  /                           — Panel web (requiere sesion)
+  GET  /login                      — Formulario de login
+  POST /login                      — Procesar login
+  GET  /logout                     — Cerrar sesion
+  GET  /health                     — Health check (sin auth)
+  GET  /metrics                    — RAM, goroutines, uptime
+  
+  GET  /api/state                  — Estado completo del sistema
+  GET  /api/workers                — Lista de workers
+  GET  /api/tasks                  — Lista de tareas
+  GET  /api/sessions               — Sesiones activas
+  GET  /api/keepalive              — Estado del keep-alive
+  POST /api/keepalive              — Activar/desactivar keep-alive
+  
+  POST /api/task                   — Crear tarea nueva
+  POST /api/task/{id}/cancel       — Cancelar tarea
+  POST /api/task/{id}/retry        — Reintentar tarea
+  POST /api/task/{id}/delete       — Eliminar tarea
+  POST /api/tasks/clear            — Limpiar todas las tareas
+  
+  POST /api/task/{id}/subtask/{sid}/retry    — Reintentar subtarea
+  POST /api/task/{id}/subtask/{sid}/cancel   — Cancelar subtarea
+  POST /api/task/{id}/subtask/{sid}/delegate — Delegar subtarea a otro worker
+  
+  GET  /api/task/{id}/conversation        — Conversacion completa de la tarea
+  GET  /api/subtask/{id}/{sid}/conversation — Conversacion de una subtarea
+  
+  POST /api/worker-action          — Acciones de workers (POST con JSON)
+  GET  /api/worker-poll            — Long-polling para workers
+
+  # Proxy a C3 (Carlos Code):
+  /api/c3/*                        — Proxy reverse a C3
+
+3.6. PERSISTENCIA (db.py)
+
+  CONEXION:
+    - Usa asyncpg con pool de conexiones (min=1, max=5)
+    - Parseo manual de DATABASE_URL con regex (por passwords con corchetes)
+    - sslmode=require, statement_cache_size=0 (compat pgbouncer)
+    - Fuerza IPv4 (asyncpg intenta IPv6 y falla en Render)
+
+  TABLAS:
+    workers         — Estado de cada PC (id, name, perf, weight, brand, model, os, status)
+    tasks           — Tareas principales (id, prompt, status, mode_used, plan_json)
+    subtasks        — Subtareas (id, task_id, worker, file, status, output)
+    events          — Log de eventos (ts, msg)
+    keepalive_state — Toggle keep-alive + ultimo heartbeat
+    worker_memory   — Snapshot persistente de workers (para sobrevivir reinicios)
+    panel_state     — Estado global del panel
+    gateway_history — Historial de requests al gateway
+    carlos_code_history — Historial de planes
+    carlos_sections — Secciones de conversacion
+    custom_services — Servicios personalizados del panel
+    service_tables  — Tablas key/value por servicio
+
+  FALLBACK A ARCHIVO:
+    Si no hay DATABASE_URL, todo se guarda en .cai_tasks.json
+    Esto permite que las tareas sobrevivan a spin-down de Render free
+    (el disco se preserva, solo se pierde RAM en reinicio)
+
+  DEBOUNCE:
+    Los cambios de estado de workers se acumulan en _dirty_workers
+    y se persisten en batch para reducir writes a Supabase
+
+3.7. KEEP-ALIVE
+
+  C1 ejecuta un keep-alive cada 5 minutos (KEEPALIVE_INTERVAL_SEC=300):
+  - Hace HTTP GET a /health de cada servicio
+  - Registra el estado (up/down + latencia)
+  - Si un servicio cae, lo marca como down
+  - Evita que Render haga "spin-down" de servicios free tier
+
+  Servicios monitoreados:
+    SVC-C1: Panel Web (bridgecarlos.onrender.com)
+    SVC-C2: Gateway DeepSeek (carlos-gateway.onrender.com)
+    SVC-C3: Carlos Code (carlos-code.onrender.com)
+    SVC-C4: Engram MCP (engram-mcp-q9ln.onrender.com)
+    SVC-C5: Context7+grep (context7-grep.onrender.com)
+    SVC-C6: Worker Code (worker-code.onrender.com)
+    SVC-DB: Supabase DB (check via query)
+
+3.8. CARLOS CODE INTEGRATION (carlos_code_integration.py)
+
+  Permite que el panel use C3 (Carlos Code) en vez de una PC lider local
+  para generar planes:
+
+  carlos_code_available() — Verifica si C3 esta arriba (GET /health)
+  carlos_code_plan()      — POST /plan con prompt + workers
+  carlos_code_closeout()  — POST /closeout cuando la tarea termina
+  parse_plan_assignments() — Convierte el plan de C3 al formato del panel
+
+
+================================================================================
+4. SERVICIO C2 - GATEWAY DEEPSEEK (control/gateway/)
+================================================================================
+
+ARCHIVOS:
+  - main.go            (~1170 lineas) — Servidor principal Go
+  - functions.go       — Tool calling + prompt builder
+  - internal/proxy/    — Pool de proxies HTTP
+  - pkg/types/         — Tipos compartidos
+  - extension/         — Chrome extension para capturar auth
+  - credenciales/      — Seed de auth (NO commitear)
+  - runner.js          — Script que corre en la PC del usuario
+  - setup.bat          — Instalador automatico para Windows
+  - index.html         — Pagina de landing
+  - wasm.wasm.b64      — Solver WASM para DeepSeekHashV1
+  - Dockerfile         — Alpine + binario pre-compilado
+  - go.mod, go.sum
+
+STACK: Go 1.21+, gorilla/websocket, tetratelabs/wazero (WASM), pgx
+
+4.1. PROPOSITO
+
+El Gateway es un PROXY entre los clientes (C3, C6, etc.) y chat.deepseek.com.
+Hace tres cosas criticas:
+
+  1. GESTION DE SESIONES: Crea sesiones de chat en DeepSeek
+  2. RESOLUCION DE PROOF-OF-WORK: DeepSeek exige resolver un PoW antes de
+     cada request de chat. El gateway resuelve esto automaticamente.
+  3. API COMPATIBLE: Expone una API tipo OpenAI (/v1/chat/completions)
+
+4.2. COMO FUNCIONA EL SCRAPING DE DEEPSEEK
+
+DeepSeek NO tiene una API publica con API keys convencionales. En su lugar,
+usa un sistema de autenticacion basado en:
+
+  a) BEARER TOKEN: Se obtiene de la sesion del browser (Chrome) del usuario
+  b) COOKIES: Se capturan del navegador
+  c) PROOF-OF-WORK: Antes de cada chat, DeepSeek envia un desafio PoW
+
+EL FLUJO COMPLETO:
+  1. El usuario corre "runner.js" en su PC con Chrome abierto
+  2. El runner se conecta por WebSocket al Gateway
+  3. El runner captura el bearer token y cookies de chat.deepseek.com
+  4. Los envia al Gateway via WebSocket (mensaje tipo "auth")
+  5. El Gateway los almacena en memoria + Supabase (persistencia)
+  6. Cuando alguien hace POST /v1/chat/completions:
+     a) El Gateway crea una sesion de chat (/api/v0/chat_session/create)
+     b) Pide un desafio PoW (/api/v0/chat/create_pow_challenge)
+     c) Resuelve el PoW (SHA256 o DeepSeekHashV1)
+     d) Envia el chat con el PoW resuelto (/api/v0/chat/completion)
+     e) Parsea la respuesta SSE y devuelve el texto completo
+
+4.3. PROOF-OF-WORK (PoW)
+
+DeepSeek usa PoW para prevenir abuso. El Gateway implementa dos algoritmos:
+
+  a) SHA256:
+     - Recibe: challenge, salt, difficulty, expire_at
+     - Itera nonces de 0 a 10,000,000
+     - Para cada nonce: hash = SHA256(salt + challenge + nonce)
+     - Cuenta bits ceros al inicio del hash hex
+     - Si zeros >= difficulty, resuelve el PoW
+     - Devuelve base64(JSON con answer + target_path)
+
+  b) DeepSeekHashV1 (WASM):
+     - Algoritmo propietario de DeepSeek
+     - Se ejecuta via wazero (runtime WASM en Go)
+     - El WASM esta embebido como base64 en wasm.wasm.b64
+     - Usa allocaciones de memoria WASM para el input/output
+     - Mucho mas rapido que SHA256 puro
+
+4.4. RESPUESTA SSE
+
+DeepSeek responde con Server-Sent Events (SSE). El parser maneja:
+  - Campo "p" con "reasoning" → se ignora (pensamiento)
+  - Campo "v" con string → se agrega al texto
+  - Campo "content" → se agrega al texto
+  - Campo "choices[0].delta.content" → formato OpenAI
+  - Campo "v.response.fragments[].content" → formato fragmentado
+  - Se ignora "FINISHED" y se limpia el prompt echo del inicio/fin
+
+4.5. TOOL CALLING
+
+El Gateway implementa tool calling para DeepSeek:
+  - Recibe tools en el request (formato OpenAI)
+  - Construye un prompt con las herramientas disponibles
+  - Si la respuesta contiene un tool call, lo detecta
+  - Ejecuta la herramienta localmente (bash, read, write, etc.)
+  - Hace follow-up con el resultado de la herramienta
+
+4.6. AUTH PERSISTENCE
+
+El auth se guarda en tres capas (failover):
+  1. MEMORIA: authStore (struct con RWMutex)
+  2. ARCHIVO: /tmp/auth-store.json (sobrevive reinicios del mismo deploy)
+  3. SUPABASE: tabla gateway_auth (sobrevive redeployments)
+
+  Al iniciar:
+    1. Intenta restoreAuthFromFile()
+    2. Intenta initAuthPG() → restoreAuthFromPG()
+    3. Si ninguno tiene auth, espera del WebSocket runner
+
+4.7. PROXY MANAGER
+
+Usa una lista de proxies HTTP gratuitos de proxmint/free-proxy-list:
+  - Refresh cada hora
+  - Max 100 proxies por hora
+  - Test timeout 10s
+  - Failover automatico con retries
+  - Endpoints: /proxy/status, /proxy/refresh, /proxy/change, /proxy/ui
+
+  NOTA: Los proxies se usan para requests internos, NO para DeepSeek
+  (DeepSeek requiere IPs residenciales via VPN, no de datacenter)
+
+4.8. GATEWAY HISTORY
+
+Cada request al gateway se registra fire-and-forget en:
+  - Tabla Supabase: gateway_history (request_path, prompt, response_snippet, status, latency_ms)
+  - Retencion: 30 dias (cleanup_old_history)
+
+4.9. ENDPOINTS
+
+  GET  /                          — Landing page
+  POST /v1/chat/completions       — API OpenAI-compatible
+  GET  /v1/models                 — Modelos disponibles
+  GET  /health                    — Estado del gateway
+  GET  /metrics                   — RAM, goroutines, uptime
+  POST /api/auth                  — Auth directa (sin WebSocket)
+  WS   /c2/ws                     — WebSocket del runner
+  GET  /install.js                — Descargar runner.js
+  GET  /setup.bat                 — Instalador Windows
+  GET  /proxy/status              — Estado de proxies
+  GET  /proxy/ui                  — UI de gestion de proxies
+  POST /proxy/refresh             — Refrescar lista de proxies
+  POST /proxy/change              — Cambiar proxy activo
+
+
+================================================================================
+5. SERVICIO C3 - CARLOS CODE (control/carlos_code/)
+================================================================================
+
+ARCHIVOS:
+  - main.go            (~1675+ lineas) — Orquestador completo
+  - Dockerfile
+  - README.md
+  - go.mod, go.sum
+
+STACK: Go 1.21+, pgx (Supabase)
+
+5.1. PROPOSITO
+
+Carlos Code es el CEREBRO del sistema. Recibe los prompts del usuario y:
+  1. Genera PLANES de division del trabajo
+  2. Mantiene CONVERSACIONES persistidas (secciones)
+  3. Ejecuta CHAT STREAMING con DeepSeek via el Gateway
+  4. Gestiona HERRAMIENTAS (tools) para planificacion
+  5. Hace CLOSEOUT de tareas (snapshots + commits)
+
+5.2. CHAT STREAMING (SSE)
+
+  POST /chat/stream — Endpoint principal de chat
+
+  Recibe: { prompt, section_id, request_id, model }
+  
+  Flujo:
+    1. Valida el prompt (no vacio)
+    2. Crea/obtiene la seccion (conversacion)
+    3. Agrega el mensaje del usuario a la seccion
+    4. Carga contexto de Engram (best-effort)
+    5. Envia al Gateway con los ultimos 20 mensajes
+    6. Emite eventos SSE:
+       - event: engram_query    → contexto de memoria
+       - event: token           → fragmentos de respuesta
+       - event: thinking        → razonamiento (si deepseek-reasoner)
+       - event: tool_call       → deteccion de tool calls
+       - event: tokens          → conteo de tokens in/out
+       - event: done            → finalizacion
+       - event: cancelled       → si se cancelo
+    7. Guarda la respuesta de la asistente en la seccion
+    8. Auto-compact si se pasa del 85% del budget
+
+  CANCELACION:
+    POST /chat/cancel { request_id } — Cancela un request en vuelo
+    Usa context.CancelFunc registrada en streamCancels map
+
+5.3. SECCIONES (CONVERSACIONES)
+
+  Las secciones son conversaciones persistentes (tipo pestañas de chat):
+
+  Almacenamiento:
+    - RAM: sectionsStore.byID (map de secciones activas)
+    - Supabase: tabla carlos_sections (espejo persistente)
+    - Solo la seccion ACTIVA queda en RAM
+    - Las demas se descargan a Supabase (evictInactiveSections)
+
+  Endpoints:
+    GET  /sections              — Lista todas las secciones
+    POST /sections/select       — Selecciona una (hidrata desde Supabase)
+    POST /sections/clear        — Vacia una seccion
+    POST /sections/compact      — Resume y trunca una seccion
+
+  Auto-compact:
+    - Se activa cuando una seccion supera 170,000 tokens (85% de 200k)
+    - Resume las mensajes viejos via DeepSeek
+    - Conserva los ultimos 6 mensajes
+    - Fire-and-forget (no bloquea la respuesta)
+
+  Budget:
+    - 200,000 tokens por seccion
+    - Auto-compact al 85% (170,000 tokens)
+    - Estimacion: len(text) / 4 tokens
+
+5.4. HERRAMIENTAS (TOOLS)
+
+  Carlos Code expone un catalogo de herramientas via GET /tools:
+
+  GESTION DE ARCHIVOS:
+    glob      — Buscar archivos por patron
+    grep      — Buscar contenido en archivos
+    read      — Leer archivo
+    edit      — Editar archivo (reemplazo exacto)
+    write     — Escribir archivo nuevo
+
+  EJECUCION:
+    bash      — Ejecutar comando shell (con proteccion contra destructivos)
+    git_status — Info del repo
+    git_list   — Listar archivos en GitHub
+    git_read   — Leer archivo de GitHub
+    git_commit — Crear/actualizar archivo en GitHub
+    git_delete — Eliminar archivo en GitHub
+    git_commits — Listar commits recientes
+
+  CONOCIMIENTO:
+    webfetch  — Obtener contenido de una URL
+    websearch — Buscar en la web
+    lsp       — Language server (symbols, references, diagnostics)
+    skill     — Cargar skills del proyecto
+
+  INTERACCION:
+    question  — Preguntar al usuario
+    todowrite — Gestionar todo list
+
+5.5. SERVICIO TABLES
+
+  Tablas key/value por servicio (almacenadas en Supabase):
+    - Cada servicio tiene su propia tabla de datos
+    - Ejemplo: credenciales de API, configuraciones, etc.
+    - Endpoints: GET /service-tables, POST /service-table, DELETE /service-table
+
+5.6. EMGRAN (GitHub Mirror)
+
+  Cuando una tarea termina closeout:
+    1. Se guarda un snapshot en Engram (POST /save)
+    2. Se guarda un mirror en GitHub (EMGRAN repo)
+       - Path: snapshots/YYYY-MM-DD/slug.md
+       - Contenido: # titulo + contenido
+       - Usa GitHub Contents API (PUT con sha para upsert)
+
+5.7. SKILLS
+
+  Carlos Code carga skills del proyecto desde skills/:
+  - Busca archivos SKILL.md recursivamente
+  - Los inyecta en el prompt de planificacion
+  - Convenciones del proyecto: "## CONVENCIONES DEL PROYECTO (skills)"
+
+5.8. MCP CLIENT (Model Context Protocol)
+
+  mcpHub registra servidores MCP (C5) para descubrir herramientas:
+  - GET /tools del servidor MCP
+  - Parsea el catalogo de herramientas
+  - Las agrega al prompt del planificador
+
+
+================================================================================
+6. SERVICIO C4 - ENGRAM MCP (control/engram_mcp/)
+================================================================================
+
+ARCHIVOS:
+  - server.py           (~538 lineas)
+  - engram.db           — SQLite local
+  - requirements.txt
+  - Dockerfile
+
+STACK: Python 3.12+, FastAPI, SQLite, asyncpg (Supabase)
+
+6.1. PROPOSITO
+
+Engram es la MEMORIA PERSISTENTE del sistema. Guarda:
+  - Decisiones tomadas
+  - Bugs encontrados y como se solucionaron
+  - Convenciones del proyecto
+  - Descubrimientos tecnicos
+  - Planes y resultados de tareas
+
+6.2. DUAL-WRITE
+
+  Cada operacion de escritura se hace en DOS lugares:
+    1. SQLite (cache local, rapido)
+    2. Supabase (primary store, durable)
+
+  Si Supabase falla, la operacion igualmente tiene exito (fail-open).
+
+6.3. TABLA
+
+  engram_observations:
+    id         TEXT PRIMARY KEY
+    title      TEXT
+    type       TEXT (decision, bugfix, architecture, discovery, pattern, task, manual)
+    topic      TEXT (para agrupar por tema)
+    content    TEXT (contenido estructurado: What/Why/Where/Learned)
+    tags       TEXT (JSON array)
+    created_at TEXT
+    updated_at TEXT
+
+6.4. SEED
+
+  Al primer arranque, si SQLite esta vacio:
+  1. Intenta cargar desde Supabase (boot-load)
+  2. Si Supabase tambien esta vacio, importa observations.json (bundled)
+  3. observations.json tiene 23 observaciones exportadas el 2026-09-05
+
+6.5. ENDPOINTS
+
+  POST /save           — Guardar observacion nueva
+  POST /import         — Importar observaciones (idempotente, dedup)
+  GET  /search         — Buscar por texto, tipo, topic
+  GET  /get/{id}       — Obtener una observacion
+  GET  /recent         — Observaciones recientes
+  PUT  /update/{id}    — Actualizar observacion
+  DELETE /delete/{id}  — Eliminar observacion
+  GET  /health         — Health check
+  GET  /metrics        — RAM, CPU, uptime
+  GET  /stats          — Estadisticas (total, by_type, by_topic)
+
+
+================================================================================
+7. SERVICIO C5 - CONTEXT7+GREP (control/context7_grep/)
+================================================================================
+
+ARCHIVOS:
+  - server.py           (~620 lineas)
+  - requirements.txt
+  - README.md
+  - Dockerfile
+
+STACK: Python 3.12+, FastAPI, httpx
+
+7.1. PROPOSITO
+
+Herramientas de CONOCIMIENTO para el orquestador:
+  - Context7: documentacion de librerias y frameworks
+  - grep.app: busqueda de codigo en repositorios de GitHub
+  - GitHub API: operaciones CRUD sobre el repo
+  - Render API: gestion de servicios en Render
+
+7.2. CONTEXT7
+
+  API externa: https://api.context7.com
+  
+  /context7/resolve — Resuelve nombre de paquete a ID
+    GET /context7/resolve?query=nextjs
+    → { library_id: "/vercel/next.js", ... }
+
+  /context7/docs — Obtiene documentacion
+    GET /context7/docs?library=/vercel/next.js&query=routing&tokens=10000
+    → { docs: "...", source: "context7" }
+
+7.3. GREP_APP
+
+  API externa: https://grep.app/api
+  
+  /grep_app/search — Busca codigo en GitHub
+    GET /grep_app/search?q=useState&lang=typescript
+    → { results: [...], total: 42 }
+
+7.4. GITHUB API
+
+  Operaciones sobre el repo 1000carlospena-prog/cai:
+  
+  POST /git/status    — Info del repo
+  POST /git/list      — Listar archivos (path: "src/")
+  POST /git/read      — Leer archivo (path: "src/app.py")
+  POST /git/commit    — Crear/actualizar archivo
+  POST /git/delete    — Eliminar archivo (necesita SHA)
+  POST /git/commits   — Listar commits recientes
+
+  Usa GITHUB_TOKEN para autenticacion via Bearer token.
+
+7.5. RENDER API
+
+  Operaciones sobre servicios Render:
+  
+  POST /render/list_services   — Listar servicios
+  POST /render/get_service     — Obtener servicio por ID
+  POST /render/list_deploys    — Listar deploys
+  POST /render/trigger_deploy  — Trigger deploy nuevo
+  POST /render/get_logs        — Obtener logs
+
+  Usa RENDER_API_KEY para autenticacion.
+
+7.6. MCP TOOLS
+
+  Expone un catalogo MCP via GET /tools con todas las herramientas
+  disponibles (context7, grep, git, render). C3 consume esto para
+  descubrir que herramientas tiene disponibles.
+
+
+================================================================================
+8. SERVICIO C6 - WORKER CODE (control/worker_code/)
+================================================================================
+
+ARCHIVOS:
+  - main.go             (~645 lineas)
+  - Dockerfile
+  - README.md
+  - entrypoint.sh
+  - go.mod
+
+STACK: Go 1.21+
+
+8.1. PROPOSITO
+
+Worker minimalista que se registra en C1, drena la cola por long-polling,
+y ejecuta las tareas que le asignan. NO planifica — solo implementa.
+
+8.2. CONFIGURACION (ENV VARS)
+
+  PANEL_URL        — URL del panel C1
+  WORKER_TOKEN     — CONTROL_TOKEN compartido
+  WORKER_ID        — ID unico del worker
+  WORKER_NAME      — Nombre para mostrar
+  WORKER_PERF      — Rendimiento 1-100
+  WORKER_WEIGHT    — Peso para reparto %
+  PROJECT_PATH     — Ruta del checkout (obligatorio)
+  GATEWAY_URL      — URL del Gateway C2
+  GIT_REPO         — Repo para commit
+  GIT_COMMIT       — true/false
+  GIT_PUSH         — true/false
+  POLL_INTERVAL    — Segundos entre polls (2-15)
+
+8.3. FLUJO
+
+  ARRANQUE:
+    1. loadConfig() — lee env vars
+    2. startHealthServer() — levanta /health en PORT (10000)
+    3. register() — POST /api/worker-action con tipo="registro"
+    4. Entra en poll loop infinito
+
+  POLL LOOP:
+    1. GET /api/worker-poll?token=...&id=...&timeout=10
+    2. Recibe lista de mensajes
+    3. Para cada mensaje, llama a handleMessage()
+    4. Backoff exponencial en errores (2s a 8s max)
+    5. Re-registra cada 90 segundos
+
+  EJECUCION DE TAREA:
+    1. Marca estado "ocupado"
+    2. Para cada archivo en la tarea:
+       a) safePath() — verifica que la ruta este dentro de PROJECT_PATH
+       b) Lee el archivo actual (os.ReadFile)
+       c) Construye un prompt combinando tarea global + archivo actual
+       d) generateContent() — POST al Gateway C2
+       e) Si el contenido cambio, escribe el archivo (os.WriteFile)
+    3. Si GIT_COMMIT=true, hace git add + commit (+ push si GIT_PUSH)
+    4. Reporta resultado a C1
+    5. Marca estado "disponible"
+
+  SEGURIDAD:
+    - safePath() valida que relPath este dentro de PROJECT_PATH
+    - No escapa del directorio del proyecto
+    - No usa shell para escritura (os.WriteFile directo)
+
+8.4. CONSOLE SSE
+
+  El worker tiene un "console" in-memory que muestra el progreso:
+  
+  GET  /console/stream   — SSE con eventos en vivo
+  GET  /console/commands — Lista de comandos disponibles
+  POST /console/clear    — Limpiar consola
+
+  Eventos emitidos: thinking, preparing_write, tokens, done
+
+  Maximo: 50,000 tokens estimados (len/4), auto-clear
+
+
+================================================================================
+9. BRIDGE - PUENTE PC LOCAL (control/worker/)
+================================================================================
+
+ARCHIVOS:
+  - bridge.js           (~645 lineas)
+  - package.json
+  - install.sh / install.ps1
+
+STACK: Node.js 18+, ws (WebSocket), child_process
+
+9.1. PROPOSITO
+
+El bridge es el programa que corre en la PC DEL USUARIO para conectar
+su OpenCode al panel de control. Es el equivalente del worker pero
+para PC local.
+
+9.2. MODOS DE OPERACION
+
+  a) HEADLESS:
+     - Ejecuta "opencode run --pure <prompt>"
+     - Captura stdout/stderr
+     - NO es interactivo (el usuario no ve nada)
+
+  b) INTERACTIVO (tmux):
+     - Envia el prompt a una sesion tmux donde OpenCode ya esta abierto
+     - El usuario PUEDE ver y corregir la ejecucion
+     - El bridge lee el pane de tmux para capturar la salida
+     - Detecta fin por estabilidad (4 iteraciones sin cambios)
+
+9.3. CONFIGURACION
+
+  Guarda en ~/.bridge/config.json:
+    serverUrl          — URL del panel (ws:// o http://)
+    token              — CONTROL_TOKEN
+    workerId           — ID de la PC
+    workerName         — Nombre
+    workerPerf         — Rendimiento 1-100
+    autoLaunchOpencode — Lanzar OpenCode al iniciar
+    opencodeCmd        — Comando de OpenCode
+    interactive        — Modo interactivo
+    session            — Nombre de sesion tmux
+    gitRepo            — Repo local
+    gitPush            — Hacer push tras commit
+
+  Variables de entorno (override):
+    SERVER_URL, WORKER_TOKEN, WORKER_ID, WORKER_NAME, etc.
+
+9.4. COMANDOS CLI
+
+  bridge              — Arranca el puente
+  bridge start        — Igual que arriba
+  bridge init         — Configuracion interactiva
+  bridge config get   — Mostrar config
+  bridge config set   — Guardar config
+  bridge autostart enable/disable — Auto-inicio del SO
+  bridge status       — Config + estado
+
+9.5. AUTO-START
+
+  Linux:
+    - Crea unit systemd --user: bridge.service
+    - Fallback: .config/autostart/bridge.desktop
+    - Ejecuta: systemctl --user daemon-reload && enable bridge.service
+
+  Windows:
+    - Crea tarea programada: schtasks /create /tn Bridge /sc onlogon
+
+9.6. SERIALIZACION
+
+  El bridge ejecuta tareas SERIALMENTE:
+  - Usa una cadena de promesas (chain = Promise.resolve())
+  - Cada tarea se encola y espera a que la anterior termine
+  - Esto evita que OpenCode se ejecute en paralelo
+
+9.7. TIMEOUTS
+
+  TASK_TIMEOUT_MS = 120000 (2 min) — Para subtareas de codigo
+  PLAN_TIMEOUT_MS = 600000 (10 min) — Para planes de la PC principal
+
+9.8. GIT + DEPLOY
+
+  Si gitRepo esta configurado:
+  1. git add -A
+  2. git commit -m "bridge: subtarea {task_id}"
+  3. Si gitPush=true: git push
+
+  Si Render API Key y Service ID estan configurados:
+  - Despues de un plan completado, trigger deploy automatico a Render
+
+
+================================================================================
+10. SERVICIOS ADICIONALES
+================================================================================
+
+10.1. BROWSER SERVICE (control/browser_service/)
+
+  Servicio Go con chromedp para automatizacion de browser.
+  Crea un pool de browsers Chrome para tareas que requieren navegacion.
+  
+  Binarios incluidos: browser-service, browser-service-linux
+
+10.2. C2-PLAYWRIGHT (control/c2-playwright/)
+
+  Runner que usa Playwright (Node.js) para automatizar Chrome.
+  Incluye: runner.js, package.json, wasm.wasm.b64, Dockerfile
+  
+  Ejecuta tareas de browser automation via WebSocket con el Gateway.
+
+10.3. PLAYWRIGHT MCP (control/playwright_mcp/)
+
+  Servicio MCP que expone herramientas de browser automation.
+  Dockerfile para despliegue aislado.
+
+
+================================================================================
+11. BASE DE DATOS (Supabase/PostgreSQL)
+================================================================================
+
+11.1. CONEXION
+
+  URL de conexion: DATABASE_URL (variable de entorno)
+  Formato: postgresql://user:password@host:port/database
+  
+  PARAMETROS CRITICOS:
+    sslmode=require          — Obligatorio para Supabase
+    statement_cache_size=0   — Compatibilidad con pgbouncer (pooler)
+    Force IPv4               — asyncpg intenta IPv6 y falla en Render
+
+  PARSEO:
+    La URL se parsea con regex manual (NO urllib.parse) porque:
+    - El password contiene corchetes [...]
+    - urllib.parse los interpreta como host IPv6
+    - asyncpg tambien falla con el DSN completo
+    Se pasa user/password/host/port/database por separado a create_pool
+
+  POOL:
+    min_size=1, max_size=5 (C1)
+    min_size=1, max_size=3 (C4)
+    max_conns=2 (C2, C3)
+    Timeout de conexion: 15 segundos
+    Ping para verificar: si falla, se cierra el pool
+
+11.2. TABLAS COMPLETAS
+
+  workers:
+    id TEXT PRIMARY KEY
+    name TEXT
+    perf INT DEFAULT 5
+    weight INT DEFAULT 10
+    brand TEXT          — Marca de la PC (ej: "Dell Inc.")
+    model TEXT          — Modelo (ej: "OptiPlex 7090")
+    os TEXT             — SO (ej: "Windows 10 Pro")
+    status TEXT         — "disponible" | "ocupado" | "desconocido"
+    stats_json TEXT     — {"tasks": 0, "words": 0, "tokens": 0}
+    updated_at TIMESTAMPTZ
+
+  tasks:
+    id TEXT PRIMARY KEY
+    prompt TEXT         — El prompt original del usuario
+    status TEXT         — "planning" | "running" | "done" | "failed" | "canceled" | "paused"
+    mode_used TEXT      — "percent" | "dynamic"
+    plan_json TEXT      — JSON del plan generado
+    created_at TEXT
+    finished_at TEXT
+
+  subtasks:
+    id TEXT PRIMARY KEY
+    task_id TEXT        — FK a tasks
+    worker TEXT         — ID del worker que ejecuta
+    file TEXT           — Archivo asignado
+    files_json TEXT     — Lista de archivos (JSON)
+    status TEXT         — "running" | "done" | "returned" | "paused"
+    output TEXT         — Output/respuesta del worker
+    updated_at TIMESTAMPTZ
+
+  events:
+    id SERIAL PRIMARY KEY
+    ts TIMESTAMPTZ
+    msg TEXT
+
+  keepalive_state:
+    id TEXT PRIMARY KEY     — Siempre "default"
+    enabled BOOLEAN
+    last_run TEXT           — ISO timestamp del ultimo heartbeat
+    services_json TEXT      — Estado de cada servicio
+    updated_at TIMESTAMPTZ
+
+  worker_memory:
+    id TEXT PRIMARY KEY
+    snapshot_json TEXT      — Snapshot completo del worker
+    last_seen TIMESTAMPTZ
+
+  panel_state:
+    id TEXT PRIMARY KEY     — Siempre "default"
+    snapshot_json TEXT      — {principal_id, mode, paused, current_task}
+    updated_at TIMESTAMPTZ
+
+  gateway_history:
+    id BIGSERIAL PRIMARY KEY
+    path TEXT               — Path del request (ej: "/v1/chat/completions")
+    prompt TEXT             — Prompt enviado
+    response_snippet TEXT   — Primeros 500 chars de la respuesta
+    status INT              — HTTP status code
+    latency_ms INT          — Latencia en milisegundos
+    ts TIMESTAMPTZ
+
+  carlos_code_history:
+    id BIGSERIAL PRIMARY KEY
+    prompt TEXT
+    plan_summary TEXT
+    mode TEXT
+    workers TEXT
+    status TEXT
+    ts TIMESTAMPTZ
+
+  carlos_sections:
+    id TEXT PRIMARY KEY
+    title TEXT
+    messages_json TEXT      — JSON array de {role, content}
+    tokens INT
+    updated_at TIMESTAMPTZ
+
+  custom_services:
+    id TEXT PRIMARY KEY
+    name TEXT
+    health_url TEXT
+    dashboard_url TEXT
+    color TEXT
+    created_at TIMESTAMPTZ
+
+  service_tables:
+    service_id TEXT
+    key TEXT
+    value TEXT
+    updated_at TIMESTAMPTZ
+    PRIMARY KEY (service_id, key)
+
+  gateway_auth:           (en Supabase, via C2)
+    id TEXT PRIMARY KEY     — Siempre "default"
+    bearer TEXT
+    cookies TEXT
+    updated_at TIMESTAMPTZ
+
+  engram_observations:    (en Supabase, via C4)
+    id TEXT PRIMARY KEY
+    title TEXT
+    type TEXT
+    topic TEXT
+    content TEXT
+    tags TEXT
+    created_at TEXT
+    updated_at TEXT
+
+
+================================================================================
+12. DESPLIEGUE EN RENDER
+================================================================================
+
+12.1. SERVICIOS EN RENDER (render.yaml)
+
+  Cada servicio esta en plan FREE (512MB RAM, region oregon):
+
+  NOMBRE              PUERTO   TIPO    RUNTIME
+  ─────────────────────────────────────────────
+  control (C1)        8000     web     python
+  carlos-code (C3)    8002     web     go
+  engram-mcp (C4)     8001     web     python
+  context7-grep (C5)  8003     web     python
+  worker-code (C6)    10000    web     go
+  worker-code-1       10000    web     go
+  worker-code-2       10000    web     go
+  worker-code-3       10000    web     go
+  worker-code-4       10000    web     go
+  carlos-gateway (C2) 8080     web     go (Docker)
+
+  Total: 10 servicios web en Render free
+
+12.2. VARIABLES DE ENTORNO COMPARTIDAS
+
+  CONTROL_TOKEN     — Token de autenticación (igual en C1 y todos los workers)
+  DATABASE_URL      — URL de Supabase (C1, C2, C3, C4)
+  GITHUB_TOKEN      — Token de GitHub (C1, C3, C5)
+  RENDER_API_KEY    — API key de Render (C1, C3, C5)
+
+  Específicas por servicio:
+    PANEL_USER, PANEL_PASSWORD, SESSION_SECRET (C1)
+    CARLOS_CODE_URL (C1 → C3)
+    GATEWAY_URL (C3, C6 → C2)
+    ENGRAM_URL (C1, C3 → C4)
+    CONTEXT7_URL (C3 → C5)
+    PANEL_URL (C3, C6 → C1)
+    PROJECT_PATH (C6)
+    GIT_REPO, GIT_COMMIT, GIT_PUSH (C6)
+    EDIT_MODE (C3)
+
+12.3. LIMITACIONES DE RENDER FREE
+
+  - 512 MB RAM por servicio
+  - Spin-down despues de inactividad (~15 min sin requests)
+  - Proxy que corta WebSocket a ~20 segundos
+  - Sleep periodico (servicios se duermen y despiertan al recibir request)
+  - Build timeout limitado
+
+  MITIGACIONES:
+  - Keep-alive en C1 (ping cada 5 min a todos los servicios)
+  - HTTP long-polling en vez de WebSocket
+  - Dual-write a Supabase + archivo local
+  - Health server en cada worker (C6 necesita ser "web service" para Render free)
+
+12.4. DOCKER
+
+  El Gateway (C2) usa Docker:
+    - Base: Alpine 3.19
+    - Copia el binario pre-compilado (carlos-gateway-linux)
+    - Expone puerto 8001
+    - CMD: carlos-gateway
+
+
+================================================================================
+13. FLUJO COMPLETO DE UNA TAREA
+================================================================================
+
+Ejemplo: "Agregar autenticacion JWT a la API"
+
+  1. USUARIO envia "Agregar autenticacion JWT a la API" desde el panel web
+
+  2. C1 RECIBE la tarea:
+     - Crea task_id = "a1b2c3d4"
+     - status = "planning"
+     - Si C3 (Carlos Code) esta disponible:
+       POST /plan { prompt, workers: [...], mode: "percent" }
+     
+  3. C3 GENERA EL PLAN:
+     - Consulta Engram para contexto previo
+     - Consulta el repo via GitHub API para ver archivos existentes
+     - Pide a DeepSeek (via C2) que genere el plan
+     - DeepSeek responde:
+       {
+         "mode": "percent",
+         "note": "JWT auth en 3 archivos",
+         "items": [
+           {"file": "src/auth.py", "prompt": "Crear modulo de autenticacion JWT..."},
+           {"file": "src/routes.py", "prompt": "Agregar middleware de auth..."},
+           {"file": "tests/test_auth.py", "prompt": "Tests para JWT..."}
+         ]
+       }
+
+  4. C1 DISTRIBUYE:
+     - 3 archivos, 2 workers disponibles
+     - Worker-1 (peso 60%): src/auth.py, src/routes.py
+     - Worker-2 (peso 40%): tests/test_auth.py
+     - Crea subtask para cada asignacion
+     - Encola mensajes en inbox de cada worker
+
+  5. C6 WORKER-1 recibe tarea:
+     - GET /api/worker-poll → [{tipo: "tarea", files: ["src/auth.py"]}]
+     - Lee src/auth.py del disco (si existe)
+     - Pide a C2: "Implementa autenticacion JWT en este archivo: [contenido]"
+     - C2 resuelve PoW + DeepSeek → devuelve el codigo
+     - Worker-1 escribe src/auth.py con el nuevo contenido
+     - POST /api/worker-action {tipo: "resultado", output: "..."}
+     - Siguiente archivo: src/routes.py (mismo proceso)
+
+  6. C6 WORKER-2 recibe tarea:
+     - files: ["tests/test_auth.py"]
+     - Mismo proceso: lee → DeepSeek → escribe → reporta
+
+  7. C1 RECIBE resultados:
+     - Cada resultado actualiza la subtask
+     - Cuando todas las subtasks terminan → task status = "done"
+     - Se hace closeout:
+       a) Snapshot a Engram (POST /save)
+       b) Snapshot a EMGRAN (GitHub mirror)
+       c) POST /closeout a C3 para consolidacion
+
+  8. C1 NOTIFICA al panel:
+     - Broadcast WebSocket a todos los browsers conectados
+     - El panel muestra la tarea como completada
+
+
+================================================================================
+14. MECANISMOS DE PERSISTENCIA
+================================================================================
+
+El sistema usa una estrategia de persistencia en CAPAS:
+
+  CAPA 1: MEMORIA (RAM)
+    - workers, tasks, panel_sockets, inbox
+    - Rapido pero se pierde al reiniciar
+
+  CAPA 2: ARCHIVO LOCAL
+    - .cai_tasks.json (tasks)
+    - .cai_keepalive.json (keepalive)
+    - /tmp/auth-store.json (auth del gateway)
+    - ~/.bridge/config.json (config del bridge)
+    - engram.db (observaciones)
+    - Sobrevive spin-down de Render (disco preservado)
+    - Se pierde en redeployments nuevos
+
+  CAPA 3: SUPABASE (PostgreSQL)
+    - Todas las tablas listadas en seccion 11
+    - Persistente y duradero
+    - Dual-write: cada escritura va a RAM+archivo Y Supabase
+    - Si Supabase falla, la operacion igualmente tiene exito (fail-open)
+    - Lectura: Supabase es la fuente de verdad; se hidrata desde ahi en restart
+
+  PATRON: "Fire-and-forget"
+    Las escrituras a Supabase son asincronas y no bloquean la respuesta:
+    asyncio.create_task(db.save_task(t))
+    Si falla, se loguea pero no afecta al usuario
+
+  BOOT-LOAD:
+    Al iniciar C4 (Engram):
+    1. Inicializa SQLite
+    2. Conecta a Supabase
+    3. Si SQLite esta vacio, carga desde Supabase
+    4. Si ambas estan vacias, importa observations.json bundled
+
+
+================================================================================
+15. SEGURIDAD
+================================================================================
+
+15.1. AUTENTICACION DEL PANEL
+
+  - Login via POST /login con user + password
+  - Sesion HMAC firmada en cookie HttpOnly
+  - SESSION_SECRET estable entre reinicios
+  - Timeout de sesion: 12 horas
+  - Password nunca hardcodeada (env PANEL_PASSWORD)
+
+15.2. AUTENTICACION DE WORKERS
+
+  - Token compartido (CONTROL_TOKEN) en query string
+  - Problema: visible en logs de servidor y proxy
+  - Workers re-registran cada 90 segundos
+
+15.3. CORS
+
+  - Todos los servicios usan CORS abierto: allow_origins=["*"]
+  - Cualquier sitio puede hacer requests a los endpoints
+  - Riesgo: CSRF, data leakage
+
+15.4. PROTECCION DE ARCHIVOS
+
+  - safePath() en worker_code valida que las rutas esten dentro de PROJECT_PATH
+  - No se puede escribir fuera del directorio del proyecto
+  - El Gateway valida que los requests vengan de runners autorizados
+
+15.5. CREDENCIALES EN CODIGO
+
+  PROBLEMAS ENCONTRADOS:
+  - render.yaml tiene SESSION_SECRET hardcodeado: "cai-panel-stable-secret"
+  - SETUP_WORKERS.md contiene passwords de Render en texto plano
+  - observations.json contiene referencias a passwords: "Carlos1*"
+  - Credenciales de Supabase en comments del codigo
+  - GitHub token y Render API key en variables de entorno (no en codigo)
+
+15.6. PROTECCIONES CONTRA ABUSO
+
+  - DeepSeek PoW previene requests masivos al LLM
+  - Gateway tiene MaxFailures=5 y FailoverRetries=100
+  - Timeout de 120 segundos para requests al Gateway
+  - STUCK_SECONDS=300 previene tareas colgadas indefinidamente
+
+15.7. SEGURIDAD DEL BASH TOOL
+
+  El tool "bash" en C3 documenta que bloquea:
+  - rm -rf, rm --no-preserve-root
+  - mkfs, dd
+  - Fork bombs (:(){:|:&};:)
+  - shutdown, reboot, halt, poweroff
+  - chmod -R 777 /
+  
+  NOTA: Esta proteccion esta en la DESCRIPCION de la tool, no en un
+  executor real. Depende del LLM respetar la instruccion.
+
+
+================================================================================
+16. PROBLEMAS CONOCIDOS Y LIMITACIONES
+================================================================================
+
+16.1. RENDER WEBSOCKET PROXY
+
+  El proxy de Render (Cloudflare) CORTA WebSocket a ~20 segundos y MATA
+  la conexion cuando el cliente envia frames. Solucion: HTTP long-polling.
+
+16.2. RENDER SPIN-DOWN
+
+  Los servicios free se duermen despues de ~15 min sin requests.
+  Solucion: keep-alive en C1 que hace ping cada 5 min.
+
+16.3. DEEPSEEK SCRAPING FRAGIL
+
+  El Gateway depende de la interfaz interna de DeepSeek:
+  - /api/v0/chat_session/create
+  - /api/v0/chat/create_pow_challenge
+  - /api/v0/chat/completion
+  - Formato SSE especifico con campos "p", "v", "fragments"
+  
+  Si DeepSeek cambia su API interna, todo el Gateway se rompe.
+
+16.4. SIN RATE LIMITING
+
+  El Gateway no tiene rate limiting propio. Cualquier cliente puede
+  hacer requests ilimitados al LLM.
+
+16.5. SIN TESTS
+
+  No hay tests automatizados en el proyecto.
+
+16.6. BINARIOS EN EL REPO
+
+  - control/gateway/carlos-gateway-linux (~pesado)
+  - control/browser_service/browser-service (~pesado)
+  - control/browser_service/browser-service-linux (~pesado)
+  - wasm.wasm.b64 (embebido en el binario)
+  
+  Estos pesan significativamente el repo.
+
+16.7. TOKEN EN QUERY STRING
+
+  Los workers pasan CONTROL_TOKEN como query string en cada request:
+  /api/worker-poll?token=...&id=...
+  Esto queda visible en logs, proxy, y herramientas de monitoreo.
+
+16.8. SIN VALIDACION DE ENTRADA
+
+  Varios endpoints de C3 no validan rigurosamente el input:
+  - /plan acepta cualquier JSON
+  - /chat/stream solo valida que prompt no sea vacio
+  - No hay rate limiting por usuario
+
+16.9. ENGRAM DEDUP LENTO
+
+  La deduplicacion en /import de Engram compara TODAS las observaciones
+  existentes contra cada nueva. O(n*m) con n=existentes, m=nuevas.
+
+
+================================================================================
+17. ARCHIVOS IMPORTANTES
+================================================================================
+
+ARCHIVOS DE CODIGO PRINCIPALES:
+  control/server/server.py          — El corazon del sistema (1300+ LOC)
+  control/server/db.py              — Persistencia (820 LOC)
+  control/gateway/main.go           — Proxy DeepSeek (1170 LOC)
+  control/carlos_code/main.go       — Orquestador (1675+ LOC)
+  control/worker_code/main.go       — Worker Go (645 LOC)
+  control/worker/bridge.js          — Worker Node.js local (645 LOC)
+  control/engram_mcp/server.py      — Memoria (538 LOC)
+  control/context7_grep/server.py   — Conocimiento (620 LOC)
+
+ARCHIVOS DE CONFIGURACION:
+  render.yaml                       — Blueprint de Render (243 lineas)
+  .env.example                      — Variables de entorno
+  Dockerfile                        — Para C2 Gateway
+  requirements.txt                  — Dependencias Python
+  .gitignore                        — Archivos ignorados
+
+ARCHIVOS DE DOCUMENTACION:
+  README.md                         — Descripcion minima
+  SETUP.md                          — Guia de instalacion del Gateway
+  SETUP_WORKERS.md                  — Guia de workers (contiene credenciales!)
+  control/Herramientas.txt          — Notas sobre herramientas
+  control/conversacion.txt          — Conversaciones de prueba
+  engram/observations.json          — 23 observaciones exportadas
+  openspec/                         — Specs de diseño (persistence-history)
+
+ARCHIVOS DE SETUP:
+  setup/INSTALACION_WINDOWS.txt
+  setup/INSTALAR_WINDOWS.txt
+  setup/INSTALL.txt
+  setup/INSTALAR_GATEWAY.txt
+  setup/SETUP_WORKERS.md
+  setup/CARLOS_CODE_PLAN.md
+  setup/MIGRATION_SUMMARY.md
+  setup/setup-worker.sh
+  setup/bridge/                     — Bridge pre-configurado
+  setup/env-variables-table.txt
+
+
+================================================================================
+18. VARIABLES DE ENTORNO
+================================================================================
+
+C1 - PANEL WEB:
+  PORT                    — Puerto (default: 8000)
+  CONTROL_TOKEN           — Token de autenticacion de workers
+  PANEL_USER              — Usuario del login (default: "cmpf")
+  PANEL_PASSWORD          — Password del login
+  SESSION_SECRET          — Secreto para firmar cookies HMAC
+  DATABASE_URL            — URL de Supabase
+  GITHUB_TOKEN            — Token de GitHub
+  RENDER_API_KEY          — API key de Render
+  CARLOS_CODE_URL         — URL de C3
+  CARLOS_CODE_TIMEOUT     — Timeout para requests a C3 (default: 30s)
+  WORKER_TIMEOUT          — Segundos sin poll para marcar worker caido (default: 60)
+  STUCK_SECONDS           — Segundos sin progreso para reasignar (default: 300)
+  IDLE_BUSY_S             — Segundos ocupada para preempcion idle (default: 300)
+  IDLE_FREE_S             — Segundos libre para ser candidata (default: 300)
+  IDLE_RESP_S             — Segundos sin respuesta para reasignar (default: 300)
+  ENGRAM_URL              — URL de C4
+  WORKER_CODE_URL         — URL base de workers
+  KEEPALIVE_FILE          — Path del archivo de keepalive
+
+C2 - GATEWAY:
+  PORT                    — Puerto (default: 8080)
+  DATABASE_URL            — Para persistir auth y history
+
+C3 - CARLOS CODE:
+  PORT                    — Puerto (default: 8002)
+  GATEWAY_URL             — URL de C2
+  ENGRAM_URL              — URL de C4
+  CONTEXT7_URL            — URL de C5
+  PANEL_URL               — URL de C1
+  EDIT_MODE               — true/false
+  PROJECT_PATH            — Ruta del proyecto (default: /workspaces/cai)
+  GITHUB_TOKEN            — Token de GitHub
+  RENDER_API_KEY          — API key de Render
+  REPO_OWNER              — Owner del repo (default: 1000carlospena-prog)
+  REPO_NAME               — Nombre del repo (default: cai)
+  EMGRAN_REPO_OWNER       — Owner del mirror EMGRAN (default: 1000carlos-prog)
+  EMGRAN_REPO_NAME        — Nombre del mirror (default: EMGRAN)
+
+C4 - ENGRAM MCP:
+  PORT                    — Puerto (default: 8001)
+  ENGRAM_DB_PATH          — Path de SQLite (default: engram.db)
+  ADMIN_TOKEN             — Token de administrador
+  DATABASE_URL            — URL de Supabase
+
+C5 - CONTEXT7+GREP:
+  PORT                    — Puerto (default: 8003)
+  GITHUB_TOKEN            — Token de GitHub
+  CONTEXT7_API            — API de Context7 (default: https://api.context7.com)
+  GREP_APP_API            — API de grep.app (default: https://grep.app/api)
+  RENDER_API              — API de Render (default: https://api.render.com/v1)
+  REPO_OWNER              — Owner del repo
+  REPO_NAME               — Nombre del repo
+  RENDER_API_KEY          — API key de Render
+  RENDER_OWNER_ID         — Owner ID de Render
+
+C6 - WORKER CODE:
+  PORT                    — Puerto (default: 10000)
+  PANEL_URL               — URL de C1
+  WORKER_TOKEN            — CONTROL_TOKEN
+  WORKER_ID               — ID unico del worker
+  WORKER_NAME             — Nombre para mostrar
+  WORKER_PERF             — Rendimiento 1-100
+  WORKER_WEIGHT           — Peso para reparto %
+  WORKER_OS               — Sistema operativo
+  PROJECT_PATH            — Ruta del checkout (obligatorio)
+  GATEWAY_URL             — URL de C2
+  GIT_REPO                — Repo para git commit
+  GIT_COMMIT              — true/false
+  GIT_PUSH                — true/false
+  POLL_INTERVAL           — Segundos entre polls (2-15)
+
+
+================================================================================
+19. APRENDIZAJES CLAVE
+================================================================================
+
+1. RENDER WEBSOCKET ES INUTIL:
+   El proxy de Render (Cloudflare) mata WebSocket a ~20s y al recibir
+   frames del cliente. HTTP long-polling es la unica opcion confiable.
+
+2. SUPABASE PASSWORD CON CORCHETES:
+   La password de Supabase venia con [...]. urllib.parse y pgx la
+   interpretan como IPv6. Solucion: regex manual + params por separado.
+
+3. ASYNCPG NECESITA IPv4 FORZADO:
+   asyncpg intenta IPv6 primero. En Render, IPv6 no funciona y da
+   "Network is unreachable" sin reintentar IPv4. Solucion: resolver
+   IPv4 con socket.getaddrinfo antes de crear el pool.
+
+4. DEEPSEEK NO TIENE API PUBLICA:
+   Toda la interaccion con DeepSeek es via scraping de la web UI.
+   Esto es fragil pero funciona. El PoW es el mayor desafio tecnico.
+
+5. FIRE-AND-FORGET ES CRITICO:
+   Todas las escrituras a Supabase son async y no bloquean la respuesta.
+   Si Supabase cae, el sistema sigue funcionando. La persistencia a
+   archivo es el safety-net.
+
+6. SERIALIZACION POR WORKER:
+   Cada worker ejecuta tareas de a una. Si tiene 3 archivos de tarea A
+   y 2 de tarea B, hace A-A-A-B-B (no A-B-A-B). Esto evita conflictos.
+
+7. WORK-STEALING Y PREEMPCION:
+   El sistema redistribuye trabajo automaticamente:
+   - Workers libres roban de colas cargadas (cada 10s via rebalance)
+   - Si un worker lleva mucho tiempo ocupado y otro esta libre, handoff
+   - Si el handoff no se responde, reasignacion completa desde cero
+
+8. ESTADO CONOCIDO:
+   worker_memory mantiene el ultimo estado conocido de cada worker,
+   incluso si se desconecta. Esto permite que el historial del panel
+   muestre "ultimo status conocido" en vez de "desconectado".
+
+9. DUAL-WRITE ES LA PATRON BASE:
+   Todo se escribe en RAM+archivo Y en Supabase. Si una falla, la otra
+   compensa. Las tablas se hidratan desde Supabase al iniciar.
+
+10. RENDER FREE IMPLICA MILITAR:
+    Con 512MB RAM y spin-down periodico, cada gota de memoria cuenta.
+    Las secciones de chat se descargan a Supabase cuando no estan activas.
+    El auto-compact reduce el contexto al 85% del budget.
+
+11. EL TOKEN DE GITHUB ES CRITICO:
+    Se usa para: GitHub API (repo CRUD), EMGRAN mirror, Render API.
+    Si se pierde, C3, C5 y el mirror dejan de funcionar.
+
+12. DEBOUNCE EN WORKERS:
+    Los cambios de estado de workers se acumulan y se persisten en batch.
+    Esto reduce la carga a Supabase (evita 100 writes/minuto).
+
+13. HMAC COMPARISON:
+    secrets.compare_digest() es timing-safe. Sin esto, un atacante podria
+    medir el tiempo de comparacion para adivinar la session.
+
+14. SAFE PATH ES OBLIGATORIO:
+    workers escriben archivos en la PC. Sin safePath(), un path como
+    "../../../../etc/passwd" podria sobreescribir archivos del sistema.
+
+15. CONSOLE CLEAR AUTOMATICO:
+    El console del worker se limpia automaticamente a 50k tokens
+    estimados (len/4). Evita que la RAM se desborde.
+
+
+================================================================================
+20. COMO ARRANCAR LOCALMENTE
+================================================================================
+
+PREREQUISITOS:
+  - Python 3.12+
+  - Go 1.21+
+  - Node.js 18+
+  - Cuenta de Supabase con DATABASE_URL
+  - Token de GitHub (GITHUB_TOKEN)
+  - API key de Render (RENDER_API_KEY)
+
+PASOS:
+
+  1. CLONAR EL REPO:
+     git clone https://github.com/1000carlospena-prog/cai.git
+     cd cai
+
+  2. CREAR .ENV:
+     cp .env.example .env
+     # Editar .env con tus valores:
+     # CONTROL_TOKEN=tu_token_secreto
+     # PANEL_PASSWORD=tu_password
+     # SESSION_SECRET=genera_un_secreto_largo
+     # DATABASE_URL=tu_url_de_supabase
+     # GITHUB_TOKEN=tu_token_de_github
+     # RENDER_API_KEY=tu_api_key_de_render
+
+  3. C1 - PANEL WEB:
+     pip install -r requirements.txt
+     pip install -r control/server/requirements.txt
+     PANEL_PASSWORD=tu_password SESSION_SECRET=secret DATABASE_URL=url \
+       uvicorn control.server.server:app --host 0.0.0.0 --port 8000
+
+  4. C4 - ENGRAM MCP:
+     pip install -r control/engram_mcp/requirements.txt
+     DATABASE_URL=url uvicorn control.engram_mcp.server:app --host 0.0.0.0 --port 8001
+
+  5. C5 - CONTEXT7+GREP:
+     pip install -r control/context7_grep/requirements.txt
+     GITHUB_TOKEN=tu_token uvicorn control.context7_grep.server:app --host 0.0.0.0 --port 8003
+
+  6. C2 - GATEWAY (requiere Go):
+     cd control/gateway
+     go build -o carlos-gateway .
+     ./carlos-gateway
+     # Necesita runner.js corriendo en una PC con Chrome y DeepSeek
+
+  7. C3 - CARLOS CODE (requiere Go):
+     cd control/carlos_code
+     go build -o carlos-code .
+     GATEWAY_URL=http://localhost:8080 ENGRAM_URL=http://localhost:8001 \
+       CONTEXT7_URL=http://localhost:8003 PANEL_URL=http://localhost:8000 \
+       ./carlos-code
+
+  8. C6 - WORKER CODE (requiere Go):
+     cd control/worker_code
+     go build -o worker-code .
+     PANEL_URL=http://localhost:8000 WORKER_TOKEN=tu_token \
+       WORKER_ID=local-worker PROJECT_PATH=/ruta/al/proyecto \
+       GATEWAY_URL=http://localhost:8080 ./worker-code
+
+  9. BRIDGE (PC local):
+     cd control/worker
+     npm install
+     node bridge.js init   # Configurar
+     node bridge.js        # Arrancar
+
+
+================================================================================
+FIN DEL DOCUMENTO
+================================================================================
+
+Este documento cubre absolutamente todo lo aprendido del proyecto CAI:
+arquitectura, servicios, persistencia, despliegue, seguridad, limitaciones,
+y como arrancar localmente.
+
+Cualquier persona que lea este documento deberia poder entender COMO funciona
+el sistema, POR QUE se tomaron ciertas decisiones de diseno, y QUE problemas
+conocidos existen.
+
+Generado: 2026-09-09
+Analista: OpenCode (big-pickle)
+Repositorio: github.com/1000carlospena-prog/cai
+================================================================================

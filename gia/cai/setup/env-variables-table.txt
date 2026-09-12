@@ -1,0 +1,96 @@
+Tabla de variables de entorno y comandos de start por proyecto
+
+VARIABLES DE ENTORNO (archivo .env y .env.example):
+
+1. CONTROL_TOKEN
+   - Descripción: Token de control para autenticar conexiones de workers al servidor
+   - Valor actual: localtest123 (archivo .env) / cambia-este-token-por-uno-seguro (archivo .env.example)
+   - Archivo: /workspaces/cai/.env, /workspaces/cai/control/server/.env.example
+
+2. PANEL_USER
+   - Descripción: Usuario para login al panel web
+   - Valor actual: cmpf
+   - Archivo: /workspaces/cai/.env
+
+3. PANEL_PASSWORD
+   - Descripción: Contraseña para login al panel web
+   - Valor actual: Carlos1*
+   - Archivo: /workspaces/cai/.env
+
+4. SESSION_SECRET
+   - Descripción: Secreto de sesión para mantenimiento de cookies del panel
+   - Valor actual: localtestsecret123
+   - Archivo: /workspaces/cai/.env
+
+5. DATABASE_URL
+   - Descripción: URL de conexión a la base de datos Supabase/Postgres
+   - Valor actual: postgresql://postgres:[3cad6cf102f]@db.qqaocynurdhtmmxktzcz.supabase.co:5432/postgres
+   - Archivo: /workspaces/cai/.env
+
+6. PORT
+   - Descripción: Puerto en el que escucha el servidor panel web y WebSockets
+   - Valor actual: 8000
+   - Archivo: /workspaces/cai/control/server/.env.example
+
+7. CONTROL_TOKEN (server example)
+   - Descripción: Token que debe ser idéntico en servidor y workers
+   - Valor actual: cambia-este-token-por-uno-seguro
+   - Archivo: /workspaces/cai/control/server/.env.example
+
+8. SESSION_SECRET (server example - derivado)
+   - Descripción: Secreto para cookies, preferencia: env SESSION_SECRET -> CONTROL_TOKEN -> default fijo
+   - Valor actual: no definido explícitamente en .env.example, usa default "cai-panel-stable-secret"
+   - Archivo: /workspaces/cai/control/server/.env.example
+
+9. PANEL_USER (server example)
+   - Descripción: Usuario del panel web
+   - Valor actual: cmpf
+   - Archivo: /workspaces/cai/control/server/.env.example
+
+10. PANEL_PASSWORD (server example)
+    - Descripción: Contraseña del panel web
+    - Valor actual: no definido en .env.example, usa default vacío
+    - Archivo: /workspaces/cai/control/server/.env.example
+
+COMANDOS DE START POR PROYECTO:
+
+1. Configurar y iniciar bridge (PC trabajadora):
+   - Entrar al directorio del bridge: cd setup/bridge
+   - Instalar dependencias: npm install
+   - Configurar URL del servidor: node bridge.js config set serverUrl https://bridgecarlos.onrender.com/ws
+   - Configurar token: node bridge.js config set token <TOKEN>
+   - Configurar nombre de worker: node bridge.js config set workerName <nombre>
+   - Configurar rendimiento: node bridge.js config set workerPerf <1-10>
+   - Iniciar bridge: node bridge.js start  (o: setsid node bridge.js & en Linux)
+   - Auto-arranque: bridge autostart enable
+
+2. Instalar OpenCode en PC trabajadora:
+   - Opción binario: sudo cp setup/opencode/opencode-linux-x64 /usr/local/bin/opencode
+   - Opción npm: npm install -g opencode
+   - Verificar: opencode --version
+
+3. Instalar Node.js en PC trabajadora:
+   - Opción binario incluido: tar -xf setup/node/node-v20.20.2-linux-x64.tar.xz, copiar carpetas bin/lib/include/share a /usr/local/
+   - Opción sistema: curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash -, sudo apt install -y nodejs
+
+4. Instalar Git en PC trabajadora:
+   - Windows: setup/git/Git-win-x64.exe
+   - Linux: sudo apt update && sudo apt install -y git
+
+5. Configurar skills en PC trabajadora:
+   - Skills por defecto: sdd-apply, work-unit-commits, go-testing
+   - Instalar skills adicionales: cp -r /ruta/al/cai/skills/skill-name ~/.config/opencode/skills/
+
+6. Conectar bridge al panel:
+   - Verificar conexión: curl -s https://bridgecarlos.onrender.com/api/state | python3 -m json.tool
+   - Login panel: usuario cmpf, password Carlos1*
+   - Verificar en panel: Ir a https://bridgecarlos.onrender.com, verificar que PC aparezca conectada (badge verde)
+
+7. Desplegar servidor (ya deployado):
+   - Servidor corriendo en Render: https://bridgecarlos.onrender.com
+   - No requiere levantamiento local salvo para desarrollo
+
+8. Comandos de solución de problemas:
+   - Bridge status: node bridge.js status
+   - Revisar logs: Ver consola del bridge process
+   - Probar conexión: Verificar URL y TOKEN

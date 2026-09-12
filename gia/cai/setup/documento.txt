@@ -1,0 +1,244 @@
+# DeepSeek C2 Runner - Guía Rápida (v2)
+# ======================================
+
+## TL;DR - 3 PASOS Y LISTO
+
+```powershell
+# 1. DESCARGAR (una vez)
+Invoke-WebRequest "https://carlos-gateway.onrender.com/install" -OutFile "runner-win.exe"
+
+# 2. EJECUTAR (con VPN ACTIVA - ProtonVPN obligatorio)
+.\runner-win.exe
+
+# 3. USAR
+#    → Se abre Chrome en DeepSeek
+#    → Te logueas normal
+#    → Enviás UN mensaje ("hola")
+#    → ¡Ya! El runner captura todo y se conecta al C2
+```
+
+---
+
+## QUÉ HACE EL RUNNER v2 (FIXES)
+
+| Fix | Qué cambió | Por qué |
+|-----|-----------|---------|
+| PoW en Node.js | WASM se fetch de CDN, se resuelve fuera del browser | Antes el base64 gigante crasheaba el runner |
+| Chat session | Se crea antes del primer request | DeepSeek requiere `chat_session_id` |
+| Auth event-driven | `exposeFunction` en vez de polling cada 1s | Más rápido, no pierde tokens |
+| Auth cache | Se guarda a disco, se restaura al reiniciar | No re-loguear si cerrás y reabris |
+| Session expiry | Detecta 401/403, pide re-login | Antes quedaba colgado |
+| Re-dispatch | Gateway re-envía requests al reconectar executor | Antes se perdían requests pendientes |
+| WASM inline eliminado | Ya no embebe el base64 gigante | Causaba "Unterminated string" en tools
+
+| Paso | Qué pasa | Acción tuya |
+|------|----------|-------------|
+| 1 | Abre Chrome con perfil persistente (`%LOCALAPPDATA%\DeepSeek-C2-Runner`) | Nada |
+| 2 | Navega a `chat.deepseek.com` | Nada |
+| 3 | Espera a que te loguees | **Logueate normal** (email/Google/GitHub + captcha) |
+| 4 | Detecta login + primer mensaje que envíes | **Enviá "hola"** |
+| 5 | Captura `Bearer token` + `cookies` automáticamente | Nada |
+| 6 | Envía auth al C2 via WebSocket | Nada |
+| 7 | Queda escuchando requests del C2 | **Nada - ya está listo** |
+
+---
+
+## DESPUÉS DE EJECUTAR - VERÁS EN CONSOLA
+
+```
+╔══════════════════════════════════════════════════════════╗
+║  DeepSeek C2 Runner v2                                   ║
+║  1. Abre DeepSeek                                        ║
+║  2. Logueate                                              ║
+║  3. Enviá UN mensaje (captura auth auto)                  ║
+║  4. ¡Listo! Recibe requests del C2                        ║
+╚══════════════════════════════════════════════════════════╝
+
+[Runner] C2: wss://carlos-gateway.onrender.com/c2/ws
+[Runner] Data: C:\Users\carlos\AppData\Local\DeepSeek-C2-Runner
+
+[Runner] Conectando al C2...
+[Runner] ✅ Conectado al C2
+[Runner] Iniciando Chrome...
+[Runner] Navegando a DeepSeek...
+
+══════════════════════════════════════════════════════════
+👉 LOGEATE EN DEEPSEEK
+👉 ENVIÁ UN MENSAJE (ej: "hola")
+👉 EL RUNNER CAPTURARÁ TU AUTH AUTOMÁTICAMENTE
+══════════════════════════════════════════════════════════
+
+[Runner] 🔐 Auth capturada!
+[Runner] Auth guardada en ...\.auth-cache.json
+[Runner] Sesión creada: abc123...
+[Runner] 📨 Request: def456...
+```
+
+---
+
+## PROBAR QUE FUNCIONA (desde CUALQUIER máquina)
+
+```bash
+# Health check
+curl https://carlos-gateway.onrender.com/health
+# {"executors":1,"pending":0,"status":"ok"...}
+
+# Chat (OpenAI-compatible)
+curl -X POST https://carlos-gateway.onrender.com/v1/chat/completions \
+  -H "Content-Type: application/json" \
+  -d '{"model":"deepseek-chat","messages":[{"role":"user","content":"Hola"}]}'
+```
+
+---
+
+## USAR CON OPENCODE / OPENAI SDK
+
+### opencode.json
+```json
+{
+  "providers": {
+    "deepseek-c2": {
+      "api": "openai",
+      "baseURL": "https://carlos-gateway.onrender.com/v1",
+      "apiKey": "not-needed",
+      "models": ["deepseek-chat", "deepseek-reasoner"]
+    }
+  }
+}
+```
+
+### Python
+```python
+from openai import OpenAI
+client = OpenAI(base_url="https://carlos-gateway.onrender.com/v1", api_key="dummy")
+print(client.chat.completions.create(model="deepseek-chat", messages=[{"role":"user","content":"Hola"}]))
+```
+
+### JavaScript
+```javascript
+import OpenAI from "openai"
+const client = new OpenAI({baseURL:"https://carlos-gateway.onrender.com/v1",apiKey:"dummy"})
+const r = await client.chat.completions.create({model:"deepseek-chat",messages:[{role:"user",content:"Hola"}]})
+console.log(r.choices[0].message.content)
+```
+
+---
+
+## REQUISITOS MÍNIMOS EN WINDOWS
+
+| Requisito | Detalle |
+|-----------|---------|
+| **VPN Residencial** | **OBLIGATORIO** - ProtonVPN, Mullvad, etc. (DeepSeek bloquea datacenters) |
+| **Chrome/Edge** | Instalado y actualizado (el runner usa `channel: 'chrome'`) |
+| **Cuenta DeepSeek** | Válida y accesible |
+
+> **No necesitás Node.js** - el `.exe` ya lo trae embebido (54 MB)
+
+---
+
+## TROUBLESHOOTING RÁPIDO
+
+| Síntoma | Solución |
+|---------|----------|
+| `executors: 0` en health | Runner no corriendo o no dice "Conectado al C2" |
+| Timeout / 504 | Reintentar (DeepSeek a veces lento) |
+| `PoW failed` | WASM no cargó del CDN → verificar VPN, reintentar |
+| `Sesión creada: undefined` | DeepSeek cambió el API → abrir issue |
+| DNS error / no carga DeepSeek | **VPN apagada** → activar ProtonVPN |
+| Chrome crashea / no abre | Borrar `%LOCALAPPDATA%\DeepSeek-C2-Runner` y volver a ejecutar |
+| Auth expirada (401/403) | Runner detecta y pide re-login automáticamente |
+| Requests perdidos después de reconectar | Gateway ahora re-dispatcha automáticamente |
+
+---
+
+## MANTENIMIENTO
+
+**Re-login (sesión expira ~6-12hs):**
+```powershell
+# 1. Ctrl+C en runner
+# 2. Borrar datos: Remove-Item -Recurse -Force "$env:LOCALAPPDATA\DeepSeek-C2-Runner"
+# 3. Volver a ejecutar .\runner-win.exe y loguearse
+```
+
+**Actualizar runner:**
+```powershell
+Invoke-WebRequest "https://carlos-gateway.onrender.com/install" -OutFile "runner-win.exe"
+# Matar anterior y ejecutar nuevo
+```
+
+---
+
+## SEGURIDAD
+
+- ✅ Tu sesión DeepSeek **NUNCA sale de tu Windows** (queda en `%LOCALAPPDATA%\DeepSeek-C2-Runner`)
+- ✅ Gateway solo encola requests, **no ve tu sesión ni respuestas**
+- ✅ Comunicación Runner ↔ C2: **WebSocket sobre TLS (WSS)**
+- ✅ Sin API keys - gateway público pero **requiere runner conectado**
+
+---
+
+## COMPARATIVA: TOKEN FREE GATEWAY vs ESTE RUNNER
+
+| Aspecto | Token Free Gateway | Este Runner (DeepSeek only) |
+|---------|-------------------|----------------------------|
+| **Lenguaje** | TypeScript + Bun | Node.js + pkg |
+| **Binario** | ~37-40 MB (nativo Bun) | ~54 MB (Node.js embebido) |
+| **Providers** | 13 (Claude, GPT, Gemini, DeepSeek, etc.) | **Solo DeepSeek** |
+| **Arquitectura** | CDP (Chrome DevTools Protocol) | Playwright `page.evaluate()` |
+| **Auth** | `webauth` wizard interactivo | **Auto al enviar 1er mensaje** |
+| **Daemon** | `start`/`stop`/`restart`/`status` | Proceso foreground simple |
+| **Config** | Archivo `~/.token-free-gateway/config.json` | **Hardcodeado** (zero config) |
+| **Uso** | `token-free-gateway webauth` → `start` | `.\runner-win.exe` → loguearse → listo |
+
+---
+
+## ENDPOINTS DEL GATEWAY (referencia)
+
+| Endpoint | Método | Uso |
+|----------|--------|-----|
+| `/health` | GET | Estado: `{"executors":1,"pending":0,"status":"ok"}` |
+| `/v1/chat/completions` | POST | **OpenAI-compatible** - tu cliente apunta aquí |
+| `/c2/ws` | WS | Interno: runner ↔ gateway |
+| `/install` | GET | Descarga `runner-win.exe` (54 MB) |
+
+---
+
+## COMANDOS PARA COPIAR-PEGAR
+
+```powershell
+# PRIMERA VEZ
+Invoke-WebRequest "https://carlos-gateway.onrender.com/install" -OutFile "runner-win.exe"
+
+# CADA VEZ QUE QUIERAS USAR DEEPSEEK VIA API
+.\runner-win.exe
+# (se abre Chrome → logueate → enviá "hola" → listo)
+
+# TEST RÁPIDO
+curl https://carlos-gateway.onrender.com/health
+curl -X POST https://carlos-gateway.onrender.com/v1/chat/completions -H "Content-Type: application/json" -d '{"model":"deepseek-chat","messages":[{"role":"user","content":"test"}]}'
+```
+
+---
+
+## ARCHIVOS DEL PROYECTO
+
+```
+/workspaces/cai/
+├── control/
+│   ├── gateway/           # C2 Gateway (Go) - Render
+│   │   ├── main.go
+│   │   ├── runner-win.exe # Embebido, servido en /install
+│   │   └── carlos-gateway-linux
+│   └── c2-playwright/     # Runner Windows
+│       ├── runner.js      # Fuente
+│       ├── runner-win.exe # Compilado con pkg
+│       └── package.json
+└── setup/
+    └── documento.txt      # ESTE ARCHIVO
+```
+
+---
+
+**Gateway:** https://carlos-gateway.onrender.com  
+**WebSocket:** wss://carlos-gateway.onrender.com/c2/ws  
+**Descarga runner:** https://carlos-gateway.onrender.com/install

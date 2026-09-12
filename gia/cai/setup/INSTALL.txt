@@ -1,0 +1,186 @@
+================================================================================
+ INSTALACIÓN DEL SISTEMA OpenCode DISTRIBUIDO — PCs TRABAJADORAS
+================================================================================
+ Este archivo explica paso a paso cómo dejar una PC NUEVA lista para trabajar
+ como "PC trabajadora" (worker) del sistema. La PC principal ya tiene el panel
+ web y el servidor corriendo; vos solo preparás las PCs que van a ejecutar las
+ tareas.
+
+ RESUMEN: en cada PC trabajadora necesitás 4 cosas:
+   1. Node.js          (incluido en esta carpeta: setup/node/)
+   2. Git              (incluido para Windows en setup/git/; en Linux se instala con apt)
+   3. OpenCode         (se instala con un comando de Node; en Linux también hay binario en setup/opencode/)
+   4. El puente bridge (carpeta setup/bridge/ de este repo)
+
+  Antes de empezar, conseguí del panel (o del administrador) dos datos:
+    - URL del servidor:  ej.  https://bridgecarlos.onrender.com/ws
+    - TOKEN del worker:  es la variable CONTROL_TOKEN del servidor
+
+   --------------------------------------------------------------------------------
+   REFERENCIA RÁPIDA — TODOS LOS COMANDOS DE bridge
+   --------------------------------------------------------------------------------
+   Siempre ejecutados DENTRO de la carpeta del puente (setup/bridge o control/worker).
+   "bridge" es un alias de "node bridge.js" si lo instalaste globalmente (npm link /
+   npm i -g). Aquí se usa "node bridge.js".
+
+    node bridge.js  ·  node bridge.js start
+        PARA QUÉ SIRVE: arrancar el puente y conectarlo al servidor. Al iniciar envía
+        el REGISTRO, por eso la PC aparece como ACTIVA / conectada en el panel de
+        inmediato. Dejalo corriendo; para salir: Ctrl+C.
+
+    node bridge.js config get
+        PARA QUÉ SIRVE: ver la configuración actual guardada en ~/.bridge/config.json
+        (URL, token, nombre, rendimiento, etc.). Útil para confirmar valores antes de
+        cambiarlos o para diagnosticar conexión.
+
+    node bridge.js config set KEY VALOR
+        PARA QUÉ SIRVE: guardar un valor de configuración. Claves disponibles:
+          serverUrl          URL del servidor. Acepta https://... o wss://.../ws
+                             (bridge lo normaliza a HTTP automáticamente).
+          token              TOKEN del worker (= CONTROL_TOKEN del servidor).
+          workerId           ID único de esta PC (p.ej. pc-sala1). No repetir entre PCs.
+          workerName         Nombre visible en el panel.
+          workerPerf         1-10, rendimiento relativo (la PC con mayor perf es líder
+                             por defecto).
+          workerBrand        Marca del equipo (se autodetecta; fijala solo si falla).
+          workerModel        Modelo del equipo (se autodetecta).
+          autoLaunchOpencode true | false. Si true, bridge lanza OpenCode al iniciar.
+          opencodeCmd        Comando de OpenCode (p.ej. "opencode serve" o una ruta).
+
+    node bridge.js autostart enable
+        PARA QUÉ SIRVE: ESTE ES EL COMANDO DE AUTO-ARRANQUE. Registra bridge para que
+        se inicie SOLO al encender la PC / iniciar sesión, sin que lo arranques a mano.
+        (Detalle del comportamiento por sistema operativo, abajo.)
+        - Linux: crea la unidad systemd de usuario ~/.config/systemd/user/bridge.service
+          (Restart=on-failure, WantedBy=default.target) y la habilita; además escribe
+          ~/.config/autostart/bridge.desktop como respaldo para sesiones gráficas.
+        - Windows: crea la tarea programada "Bridge" que corre al iniciar sesión
+          (schtasks /sc onlogon).
+        En contenedores headless sin systemd, el arranque por systemd no dispara solo:
+        iniciá "node bridge.js start" manualmente o usá un supervisor (cron @reboot, pm2).
+
+    node bridge.js autostart disable
+        PARA QUÉ SIRVE: quitar el arranque automático (bridge ya no se inicia solo al
+        prender la PC; tends que arrancarlo manualmente con "node bridge.js start").
+
+    node bridge.js status
+        PARA QUÉ SIRVE: mostrar la configuración y el estado de conexión actual (si
+        está conectado al servidor o no), para verificar que todo quedó bien.
+
+
+  --------------------------------------------------------------------------------
+  PARTE A — WINDOWS
+
+--------------------------------------------------------------------------------
+ 0) Copiá toda la carpeta "setup/" a la PC nueva (USB, red, o cloná el repo).
+
+ 1) Instalar Node.js
+    - Ejecutá:  setup/node/node-v20.20.2-x64.msi   (doble clic, siguiente>siguiente)
+    - Al terminar, abrí "Símbolo del sistema" (cmd) y comprobá:
+          node -v          -> debe decir v20.20.2
+          npm -v           -> debe decir una versión
+
+ 2) Instalar Git
+    - Ejecutá:  setup/git/Git-win-x64.exe   (aceptá todas las opciones por defecto)
+    - Comprobá en cmd:
+          git --version     -> debe decir git version 2.55.x
+
+ 3) Instalar OpenCode
+    - En cmd:
+          npm install -g opencode
+    - Comprobá:
+          opencode --version   -> debe imprimir una versión
+
+ 4) Dejar el puente bridge listo
+    - Entrá a la carpeta del puente (ajustá la ruta a donde la copiaste):
+          cd setup\bridge
+    - Instalá su dependencia:
+          npm install
+    - Configurá la conexión (reemplazá la URL y el TOKEN por los reales):
+          node bridge.js config set serverUrl https://bridgecarlos.onrender.com/ws
+          node bridge.js config set token AQUI_EL_TOKEN
+          node bridge.js config set workerName PC-DE-TU-OFICINA
+    - (Opcional) que arranque solo al prender la PC:
+          node bridge.js autostart enable
+
+ 5) Conectar y probar
+    - En cmd, dentro de setup\bridge:
+          node bridge.js start
+    - Deberías ver "conectado". En el panel web, la PC aparece en "PCs conectadas".
+    - Para salir: Ctrl+C.
+
+--------------------------------------------------------------------------------
+ PARTE B — LINUX (Ubuntu/Debian)
+--------------------------------------------------------------------------------
+ 0) Copiá la carpeta "setup/" a la PC nueva (USB, scp, o cloná el repo).
+
+ 1) Instalar Node.js (opción A — usar el binario de esta carpeta)
+    - En una terminal:
+          cd setup/node
+          tar -xf node-v20.20.2-linux-x64.tar.xz
+          sudo cp -r node-v20.20.2-linux-x64/{bin,lib,include,share} /usr/local/
+    - Comprobá:
+          node -v && npm -v
+
+    (Opción B — si tenés internet, más simple:)
+          curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash -
+          sudo apt install -y nodejs
+
+ 2) Instalar Git
+    - sudo apt update && sudo apt install -y git
+    - Comprobá:  git --version
+
+ 3) Instalar OpenCode
+    - Opción A (binario de esta carpeta, sin internet):
+          sudo cp setup/opencode/opencode-linux-x64 /usr/local/bin/opencode
+          sudo chmod +x /usr/local/bin/opencode
+    - Opción B (con internet, recomendado):
+          sudo npm install -g opencode
+    - Comprobá:  opencode --version
+
+ 4) Dejar el puente bridge listo
+    - Entrá a la carpeta del puente:
+          cd setup/bridge
+          npm install
+    - Configurá la conexión (reemplazá la URL y el TOKEN por los reales):
+          node bridge.js config set serverUrl https://bridgecarlos.onrender.com/ws
+          node bridge.js config set token AQUI_EL_TOKEN
+          node bridge.js config set workerName PC-DE-TU-OFICINA
+    - (Opcional) que arranque solo al prender la PC:
+          node bridge.js autostart enable
+
+ 5) Conectar y probar
+    - Dentro de setup/bridge:
+          node bridge.js start
+    - Deberías ver "conectado". En el panel web, la PC aparece en "PCs conectadas".
+
+--------------------------------------------------------------------------------
+ PARTE C — CÓMO ENVIAR UNA TAREA DESDE EL PANEL
+--------------------------------------------------------------------------------
+ En el panel web ("Enviar tarea"):
+   - Escribí el prompt de lo que querés que haga OpenCode.
+   - Elegí el LÍDER: es la PC que coordina y divide el trabajo, y TAMBIÉN
+     trabaja (no se queda quieta).
+   - Marcá las PCs TRABAJADORAS que quieras sumar (opcional). El líder ya cuenta
+     como trabajador; podés agregar otras para repartir el trabajo.
+   - Si querés que el servidor elija solo la mejor PC libre, dejá "Automático".
+   - Pulsá "Enviar".
+
+ IMPORTANTE — cómo se organiza para que no se pisen:
+   - Una MISMA PC ejecuta UNA tarea a la vez. Si le envías dos tareas que usan
+     esa PC, termina la primera (de su líder) y recién ahí empieza la segunda.
+   - Podés tener varias tareas corriendo a la vez, y una PC puede estar en varias
+     tareas; el sistema se encarga de que no se mezclen los archivos (cada tarea
+     trabaja en su propia carpeta en la PC).
+
+--------------------------------------------------------------------------------
+ SOLUCIÓN DE PROBLEMAS
+--------------------------------------------------------------------------------
+  - "Mala conexión" / no aparece la PC: revisá la URL (puede ser https://... o
+    wss://.../ws; bridge lo normaliza a HTTP) y el TOKEN. La PC debe poder llegar a
+    la URL del servidor por internet.
+ - OpenCode no se encuentra: comprobá "opencode --version"; si falla, reinstalá
+   con "npm install -g opencode" o usá el binario de setup/opencode/.
+ - La tarea no avanza: la PC puede estar ocupada con otra tarea del mismo líder;
+   es normal, esperá a que termine la anterior en esa PC.
+================================================================================

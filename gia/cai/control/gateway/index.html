@@ -1,0 +1,127 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>DeepSeek C2 Runner</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { 
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+            background: #0a0a0a; 
+            color: #fff; 
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .container { 
+            max-width: 600px; 
+            padding: 40px;
+            text-align: center;
+        }
+        h1 { 
+            font-size: 2.5rem; 
+            margin-bottom: 10px;
+            background: linear-gradient(135deg, #00d4ff, #7b2cbf);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+        .subtitle { 
+            color: #888; 
+            margin-bottom: 40px;
+            font-size: 1.1rem;
+        }
+        .card {
+            background: #1a1a1a;
+            border: 1px solid #333;
+            border-radius: 16px;
+            padding: 30px;
+            margin-bottom: 20px;
+        }
+        .card h2 { 
+            font-size: 1.3rem; 
+            margin-bottom: 15px;
+            color: #00d4ff;
+        }
+        .card p { 
+            color: #aaa; 
+            margin-bottom: 20px;
+            line-height: 1.6;
+        }
+        .btn { 
+            display: inline-block;
+            padding: 15px 40px;
+            border-radius: 8px;
+            text-decoration: none;
+            font-weight: 600;
+            font-size: 1.1rem;
+            transition: all 0.3s;
+        }
+        .btn-primary { 
+            background: linear-gradient(135deg, #00d4ff, #7b2cbf);
+            color: #fff;
+        }
+        .btn-primary:hover { 
+            transform: translateY(-2px);
+            box-shadow: 0 10px 30px rgba(0, 212, 255, 0.3);
+        }
+        .btn-secondary { 
+            background: #333;
+            color: #fff;
+            margin-top: 15px;
+        }
+        .btn-secondary:hover { 
+            background: #444;
+        }
+        .steps {
+            text-align: left;
+            margin-top: 20px;
+        }
+        .steps li {
+            color: #aaa;
+            margin-bottom: 10px;
+            padding-left: 10px;
+        }
+        .steps li strong { color: #fff; }
+        .footer {
+            margin-top: 40px;
+            color: #555;
+            font-size: 0.9rem;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>DeepSeek C2 Runner</h1>
+        <p class="subtitle">Usá DeepSeek gratis vía API sin pagar tokens</p>
+        
+        <div class="card">
+            <h2>⚡ Instalación Rápida (Windows)</h2>
+            <p>Un solo click para instalar todo</p>
+            <a href="/setup.bat" class="btn btn-primary">⬇ Descargar Setup</a>
+            <ol class="steps">
+                <li>Hacé click en <strong>Descargar Setup</strong></li>
+                <li>Ejecutá <strong>setup.bat</strong> que se descargó</li>
+                <li>Esperá a que instale todo (1-2 min)</li>
+                <li>Doble-click en <strong>"DeepSeek Runner"</strong> en tu escritorio</li>
+                <li>Logueate en DeepSeek y listo</li>
+            </ol>
+        </div>
+
+        <div class="card">
+            <h2> O instalar manualmente</h2>
+            <p>Si preferís hacerlo paso a paso</p>
+            <a href="/install.js" class="btn btn-secondary">⬇ Solo runner.js</a>
+        </div>
+
+        <div class="card">
+            <h2> Verificar Estado</h2>
+            <p>Check que el gateway esté funcionando</p>
+            <a href="/health" class="btn btn-secondary" target="_blank"> Health Check</a>
+        </div>
+
+        <p class="footer">Gateway: carlos-gateway.onrender.com</p>
+    </div>
+</body>
+</html>

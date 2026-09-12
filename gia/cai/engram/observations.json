@@ -1,0 +1,191 @@
+{
+  "project": "cai",
+  "exported_at": "2026-09-05",
+  "total_observations": 23,
+  "observations": [
+    {
+      "id": 2,
+      "title": "Login de sesion en el panel del control server",
+      "type": "decision",
+      "topic": "auth/panel-login",
+      "created": "2026-08-28 08:38:13",
+      "content": "**What**: Agregué login de sesión (cookie HttpOnly firmada HMAC) al panel web. Protege GET /, WS /ws/panel y todos los /api/*. Los workers (WS /ws) siguen autenticándose con CONTROL_TOKEN (máquina), sin cambios.\n**Why**: El panel estaba abierto porque el CONTROL_TOKEN iba embebido en el JS del cliente. El usuario pidió login usuario/password (usuario cmpf).\n**Where**: control/server/server.py (helpers _sign/make_session/valid_session, rutas /login GET+POST y /logout, guards en index/api/ws_panel), control/server/static/index.html (quitado el token del cliente, auto-connect + cookie), render.yaml y .env.example (vars PANEL_USER/PANEL_PASSWORD/SESSION_SECRET), requirements.txt (+python-multipart).\n**Learned**: La password NO se hardcodea en el repo; se setea vía env PANEL_PASSWORD (y SESSION_SECRET para firmar la cookie, PANEL_USER default cmpf). Falla cerrado si PANEL_PASSWORD vacío. Para test local: PANEL_PASSWORD=... SESSION_SECRET=... uvicorn control.server.server:app."
+    },
+    {
+      "id": 3,
+      "title": "Persistencia del server en Supabase via DATABASE_URL",
+      "type": "decision",
+      "topic": "architecture/supabase-persistence",
+      "created": "2026-08-28 09:15:09",
+      "content": "**What**: El control server persiste estado durable (workers, tasks, subtasks, events) en Supabase usando DATABASE_URL + asyncpg. Diseño híbrido: conexiones WebSocket en vivo quedan en memoria; el estado se espeja a BD. Si DATABASE_URL falta/falla, el server degradinga a solo-memoria (no crashea).\n**Why**: El usuario quiere \"conectar todo\" a Supabase. Se eligió Postgres directo (no el cliente REST de Supabase) por simplicidad y para evitar RLS.\n**Where**: control/server/db.py (init_db/save_worker/save_task/log_event/load_tasks), server.py (import db, init en startup + load_tasks, save en registro/disconnect/creación de tarea/plan/subtask done), requirements.txt (+asyncpg), render.yaml (DATABASE_URL sync:false).\n**Learned**: La password de Supabase vino con corchetes [...]; urllib.parse y el DSN de asyncpg fallan con eso (lo interpretan como host IPv6). Se parsea la URL con regex manual y se pasa user/password por componentes a asyncpg.create_pool. load_dotenv() carga .env local. En el sandbox de dev no hay salida a Supabase (Network is unreachable), así que el round-trip en vivo solo se valida en Render."
+    },
+    {
+      "id": 4,
+      "title": "Panel de control desplegado en Render via API (LIVE)",
+      "type": "decision",
+      "topic": "deploy/render-control-panel",
+      "created": "2026-08-28 09:33:20",
+      "content": "**What**: El control server (panel) está LIVE en Render: servicio srv-da8k36ajnfac73elnneg, URL https://bridgecarlos.onrender.com. Desplegado vía Render API por pedido del usuario.\n**Why**: El usuario quiso ver la página en Render y autorizó usar la API key.\n**Where**: Render, repo github.com/1000carlospena-prog/cai branch main. Start command: uvicorn control.server.server:app --host 0.0.0.0 --port $PORT.\n**Learned**: Login es form-POST en /login (NO /api/login): GET /login sirve HTML; POST /login acepta form fields user/password y en éxito devuelve 303 + cookie panel_session. Render API schema: (1) PATCH /services/{id} requiere serviceDetails.envSpecificDetails.startCommand; (2) env vars: PUT /services/{id}/env-vars con body array plano [{key,value}]; (3) deploy: POST /services/{id}/deploys con {\"clearCache\":\"clear\"}; (4) lista de deploys: [{\"deploy\":{...},\"cursor\":...}]. Env vars seteadas en Render: PANEL_USER=cmpf, PANEL_PASSWORD, SESSION_SECRET, DATABASE_URL (Supabase), CONTROL_TOKEN."
+    },
+    {
+      "id": 5,
+      "title": "Agrupación de tareas OpenCode: líder + subset + serialización por PC",
+      "type": "architecture",
+      "topic": "architecture/opencode-distributed-grouping",
+      "created": "2026-08-28 10:12:49",
+      "content": "**What**: Cada tarea ahora elige un LÍDER (principal, también trabaja) + un subconjunto de PCs trabajadoras. Varias tareas corren concurrentes; una PC ejecuta UNA tarea a la vez (termina la de un líder antes de la de otro). Cada tarea usa su propia carpeta en la PC (.bridge_tasks/<taskId>) para que los archivos no colisionen.\n**Why**: El usuario quiere poder armar varios \"grupos\" de PCs (p.ej. 4 con un líder, 5 con otro, con solapamientos) y que no se pisen.\n**Where**: control/server/server.py (api_task elige principal+subset y encola en workers[wid][\"task_queue\"]; _distribute_weight/_free_workers/_pump_dynamic/_rebalance/dispatch_plan se acotan al subset; _dispatch_next solo despacha si la tarea está al frente de la cola de la PC; _on_subtask_done hace pop+pump de la siguiente tarea). control/worker/bridge.js (runTask usa workDir por tarea; el bridge ya serializa por PC con su cola/set_siguiente). control/server/static/index.html (radio de LÍDER + checkboxes de TRABAJADORAS en \"Enviar tarea\").\n**Learned**: El bridge.js original referenciaba workDir sin declararlo (ReferenceError latente); se declaró dentro de runTask. Opencode NO publica binario Windows en sus releases: en Windows se instala con npm i -g opencode."
+    },
+    {
+      "id": 6,
+      "title": "Render proxy mata WebSocket: worker y panel usan HTTP polling",
+      "type": "discovery",
+      "topic": "architecture/render-websocket-proxy",
+      "created": "2026-08-28 14:33:30",
+      "content": "**What**: El bridge (worker) y el panel web del control server NO pueden usar WebSocket detrás del proxy de Render: el proxy corta conexiones persistentes a ~20s y además mata la conexión al recibir frames del cliente (worker caía a 2.1s si enviaba ping/pong).\n**Why**: Render front (Cloudflare) impone un cap duro de ~20s a conexiones persistentes y no tolera frames del cliente. WebSocket es inviable para el worker.\n**Where**: control/server/server.py (ws_worker eliminado, nuevos endpoints /api/worker-action POST y /api/worker-poll GET long-polling <=15s; /api/state ahora incluye tasks); control/worker/bridge.js (reescrito a polling: registro por POST, drena comandos por GET long-poll, sube resultado/estado por POST); control/server/static/index.html (panel por polling 3s a /api/state); render.yaml (uvicorn --ws-ping-interval 0 --ws-ping-timeout 0).\n**Learned**: (1) El token en ~/.bridge/config.json era el API KEY de Render, NO el CONTROL_TOKEN. Se fijó CONTROL_TOKEN en Render para que coincida. (2) El log \"[bridge] registrado\" del WS se imprimía en 'open', no al confirmar. (3) Con polling, cada request HTTP corto reinicia el timer del proxy; el bridge reintenta con backoff y re-registra tras redeploys. (4) Endpoint /api/worker-poll usa inbox por worker + long-poll 0.3s hasta 15s; WORKER_TIMEOUT=60s limpia workers inactivos."
+    },
+    {
+      "id": 7,
+      "title": "Preempción por idle + dashboard multi-vista en control",
+      "type": "architecture",
+      "topic": "control/preemption-dashboard",
+      "created": "2026-08-28 15:06:55",
+      "content": "**What**: Rediseñé el panel de control como dashboard SPA multi-vista y añadí preempción por idle + reasignación entre PCs.\n**Why**: El usuario pidió ver cómo la líder divide el prompt, reasignar prompts pendientes entre PCs, cola multi-líder y preempción (PC ocupada 5min + otra libre 5min -> handoff; si no responde en 5min -> tarea entera a la libre + reiniciar opencode en la ocupada).\n**Where**: control/server/server.py (funciones _set_status, _preempt_by_idle, _restart_task_from_zero, POST /api/reassign; worker_view añade busy_since/idle_since; noncompliant excluye PCs de nuevos conjuntos), control/server/static/index.html (dashboard con Atomic Design + Design Tokens), control/worker/bridge.js (comando 'restart' reinicia opencode).\n**Learned**: Diseño de preempción: al detectar idle, se envía 'return_progress' a la ocupada y la LIBRE ESPERA (no se ocupa) hasta que la ocupada devuelve progreso; _on_subtask_done(status='returned') redirige el archivo a handoff_pending[st_id]['to']. IDs de constantes: IDLE_BUSY_S/IDLE_FREE_S/IDLE_RESP_S (def 300). Frontend: Atomic Design + Design Tokens (W3C DTCG)."
+    },
+    {
+      "id": 8,
+      "title": "control: bridge modo interactivo (tmux) para sesion OpenCode ya abierta",
+      "type": "architecture",
+      "topic": "architecture/control-dashboard",
+      "created": "2026-08-28 16:49:22",
+      "content": "**What**: El bridge ahora puede trabajar sobre una sesion tmux donde el usuario YA tiene OpenCode abierto. En vez de opencode run headless, hace tmux send-keys con el prompt y tmux capture-pane -p para leer la charla y volcarla al panel (handler progress). La conversacion bridge<->OpenCode corre en la terminal visible de la PC y el usuario puede intervenir escribiendo ahi; el bridge detecta fin por estabilidad del pane (~8s sin cambios). Si no hay tmux, cae a headless.\n**Why**: el usuario quiere 3 PCs con OpenCode abierto, una orden suya las pone a trabajar, y el chat de cada PC sea visible + corregible a mano.\n**Where**: control/worker/bridge.js — DEFAULTS interactive/session/opencodeTuiCmd, loadConfig env INTERACTIVE/BRIDGE_SESSION/OPENCODE_TUI_CMD, runInteractive(), tmuxAvailable/stripAnsi/ensureSession, y cancel/return_progress mandan C-c a la sesion en modo interactivo.\n**Learned**: en pc-test NO hay tmux ni root para instalar, asi que siempre usa fallback headless; el modo interactivo solo se ejercita en PCs Linux/Windows-con-WSL con tmux. Setup por PC: tmux new -s opencode + opencode dentro; bridge config set interactive true y bridge config set session opencode; reiniciar bridge."
+    },
+    {
+      "id": 9,
+      "title": "Panel control: botones tarea/subtarea + historial",
+      "type": "architecture",
+      "topic": "control/panel-task-actions",
+      "created": "2026-08-28 18:36:58",
+      "content": "**What**: En control/server agregué cancelar/reintentar tarea, cancelar/reintentar/delegar subtarea, e historial de tareas con eliminar+clear.\n**Why**: Usuario pidió control manual desde el panel (no confiar en planner distribuido roto).\n**Where**: server.py (helpers _abort_task/_retry_task/_retry_subtask/_cancel_subtask/_delegate_subtask + endpoints POST /api/task/{id}/cancel|retry|delete, /subtask/{sid}/cancel|retry|delegate, /api/tasks/clear), db.py (delete_task/clear_tasks), static/index.html (taskCardHtml global buttons, subtaskRowHtml(tid,sid,s,out,actions), view-taskhistory + renderTaskHistory, bindings).\n**Learned**: Login panel es POST /login (form, cookie panel_session), NO /api/login. tmux no esta en este codespace -> modo interactivo cae a headless. Planner OpenCode en PLAN emite ruido skill-registry y pega timeout 120s -> plan basura; las features son directas en panel."
+    },
+    {
+      "id": 10,
+      "title": "Root cause: opencode run se colgaba en stdin (planner lento/bug)",
+      "type": "bugfix",
+      "topic": "control/bridge-opencode-hang",
+      "created": "2026-08-29 07:19:19",
+      "content": "**What**: El planner distribuido tardaba >120s y devolvía plan basura porque opencode run NO terminaba solo: cuando el bridge lo lanza con child_process.spawn, stdin queda como pipe abierto y OpenCode espera input tras responder (cuelgue hasta el timeout de 120s, que lo mataba a mitad -> JSON parcial). Además cargaba skills (skill-registry) y dispatch_plan rechazaba planes percent porque los archivos viven en assignments, no en files.\n**Why**: spawn por defecto deja stdin en pipe; OpenCode en modo run queda a la espera de mas turnos.\n**Where**: control/worker/bridge.js (spawn de opencode run en runTask y fallback interactivo) + control/server/server.py (parse_plan, dispatch_plan).\n**Learned**: Fix = stdio: [\"ignore\",\"pipe\",\"pipe\"] (EOF en stdin -> cierra al instante) + opencode run --pure (omite skills) + timeout plan 10min de seguridad + dispatch_plan debe leer archivos de assignments en modo percent. Verificado end-to-end local: planning->running->done en ~35s. Al cambiar bridge.js, hay que reiniciar el bridge en cada PC."
+    },
+    {
+      "id": 11,
+      "title": "Root cause: tareas del historial se pierden (solo-memoria en Render)",
+      "type": "bugfix",
+      "topic": "control/task-persistence",
+      "created": "2026-08-29 07:51:25",
+      "content": "**What**: El historial de tareas del panel se borraba solo o al crear una nueva porque las tareas vivian SOLO en memoria; al reiniciar el server (spin-down de Render free por inactividad, o deploy) se perdia todo. La causa: DATABASE_URL no esta efectivamente conectado en Render (db_ok=False), asi que db.py corria en modo solo-memoria y no espejaba a Supabase.\n**Why**: El server de Render es efimero: spin-down por inactividad (cada 15 min) y deploy nuevo matan la memoria. Sin BD externa, las tareas no sobreviven.\n**Where**: control/server/db.py (save_task/load_tasks/init_db) + control/server/server.py (startup que solo llamaba load_tasks si init_db()==True).\n**Learned**: Fix: db.py ahora tiene fallback a archivo local (.cai_tasks.json en cwd) en save_task/delete_task/clear_tasks/load_tasks, y _load_mem() se llama en TODOS los caminos de init_db. server.py ahora llama load_tasks SIEMPRE al arrancar. LIMITACION: en un deploy nuevo de Render el disco efimero se resetea; para durabilidad TOTAL hay que setear DATABASE_URL (Supabase) como env var en Render."
+    },
+    {
+      "id": 12,
+      "title": "Bloqueo: DATABASE_URL de Supabase no es alcanzable desde Render",
+      "type": "discovery",
+      "topic": "control/supabase-unreachable",
+      "created": "2026-08-29 08:05:55",
+      "content": "**What**: No se pudo activar persistencia en Supabase: el host del DATABASE_URL actual (db.qqaocynurthtmmxktzcz.supabase.co) es inalcanzable. Desde el codespace no resuelve DNS; desde el server en Render da \"[Errno 101] Network is unreachable\".\n**Why**: El proyecto de Supabase apuntado no existe/esta caido, o el string de conexion es incorrecto.\n**Where**: control/server/db.py (init_db/retry_init) + env DATABASE_URL del servicio Render.\n**Learned**: SOLUCION: el server reintenta la conexion cada 30s (retry_init), fuerza IPv4 (_ipv4), y expone has_db_url/db_stage/db_error en /api/state. Fallback a .cai_tasks.json en cwd mantiene las tareas. Para durabilidad total contra deploys falta un DATABASE_URL de Supabase VALIDO y ALCANZABLE."
+    },
+    {
+      "id": 13,
+      "title": "Supabase DB host unreachable — proyecto pausado",
+      "type": "discovery",
+      "topic": "control/supabase-unreachable",
+      "created": "2026-08-29 08:38:30",
+      "content": "**What**: El server en Render lee DATABASE_URL (has_db_url=True) pero init_db falla con \"[Errno 101] Network is unreachable\" contra db.qqaocynurdhtmmxktzcz.supabase.co.\n**Why**: El host de la DB NO resuelve DNS (patrón de proyecto Supabase free tier pausado: al pausarse se quita el DNS de la DB). El codespace tampoco resuelve ningún host *.supabase.co.\n**Where**: control/server/db.py (init_db/retry cada 30s), Render srv-da8k36ajnfac73elnneg.\n**Learned**: No se puede reanudar por API (requiere dashboard o PAT). Acción del usuario: reanudar el proyecto qqaocynurdhtmmxktzcz en Supabase; el server reconecta solo. Mientras, fallback a .cai_tasks.json mantiene las tareas."
+    },
+    {
+      "id": 14,
+      "title": "Modo porcentaje: reparto de tareas por PC",
+      "type": "architecture",
+      "topic": "control/percent-mode",
+      "created": "2026-08-29 08:38:54",
+      "content": "**What**: El panel ahora reparte tareas por porcentaje por PC en modo 'percent'. Frontend (index.html): pctMap + renderPercent() muestra input % por cada PC seleccionada; default equitativo (100/n); al editar uno, el resto se reparte en partes iguales en vivo. Backend (server.py): api_task guarda t['weights']; dispatch_plan en modo percent llama _distribute_weight(files) que parte los archivos por esos pesos (mayor resto), ignorando el assignment del planner.\n**Why**: Pedido del usuario — en percent mode cada PC recibe la proporción de trabajo que indica el %.\n**Where**: control/server/static/index.html (send form), control/server/server.py (api_task, dispatch_plan, _distribute_weight).\n**Learned**: El '5 min logic' ya existía (STUCK_SECONDS=300 + rebalanceo por timeout/idle) y aplica a ambos modos; no hacía falta código nuevo para eso."
+    },
+    {
+      "id": 15,
+      "title": "Supabase conectado vía pooler (Render)",
+      "type": "config",
+      "topic": "config/supabase-pooler",
+      "created": "2026-08-29 08:55:46",
+      "content": "**What**: La persistencia de tareas en Supabase funciona (db_ok=True). Se usa el connection pooler aws-0-us-east-2.pooler.supabase.com:6543 con ssl=\"require\" y statement_cache_size=0 en asyncpg.\n**Why**: El host directo db.<ref>.supabase.co:5432 da \"Network is unreachable\" desde Render (no rutea); el pooler sí es alcanzable. ssl=True (verify-full) fallaba con CERTIFICATE_VERIFY_FAILED; ssl=\"require\" lo resolvió. statement_cache_size=0 evita el fallo de prepared statements de asyncpg contra pgbouncer.\n**Where**: control/server/db.py (create_pool), Render srv-da8k36ajnfac73elnneg env DATABASE_URL.\n**Learned**: El proyecto no estaba pausado (Status Healthy); el problema era el egress de Render al host directo. El código re-lee DATABASE_URL cada 30s (retry_init), así que cambiar el env basta; no hace falta redeploy para reconectar."
+    },
+    {
+      "id": 16,
+      "title": "Planner end-to-end OK en pc-test; prompt vacío falla por diseño",
+      "type": "discovery",
+      "topic": "discovery/planner-e2e",
+      "created": "2026-08-29 08:58:38",
+      "content": "**What**: Verificado que el planner corre end-to-end en pc-test (líder): opencode analiza el prompt y devuelve JSON estructurado. Un prompt vacuo (\"ok\") produce assignments vacíos a propósito; dispatch_plan no encuentra archivos válidos y marca la tarea failed con mensaje claro (\"plan basura o timeout\").\n**Why**: El usuario probó con prompt \"ok\" y vio error; no es bug, es comportamiento correcto del planner (no inventa archivos para prompts sin sentido).\n**Where**: control/server/server.py (dispatch_plan), bridge pc-test ejecuta opencode.\n**Learned**: Para que una tarea funcione hay que dar prompt con entregables concretos (ej. \"creá hola.py que imprima Hola mundo\"). El mensaje de fallo es informativo, no un fallo de infra."
+    },
+    {
+      "id": 17,
+      "title": "Fix deploy crash: _db_retry_loop NameError",
+      "type": "bugfix",
+      "topic": "architecture/cai-deploy",
+      "created": "2026-08-30 04:25:08",
+      "content": "**What**: Removed undefined _db_retry_loop() call from _start_heartbeat() in server.py; fixed ssl=True -> ssl=\"require\" in retry_init() in db.py.\n**Why**: _db_retry_loop() was called at line 1444 but never defined anywhere — caused NameError on startup → Render deploy reported update_failed. The server was actually running old code (58d64d2) because new deploys crashed before starting.\n**Where**: control/server/server.py (line 1444, removed call), control/server/db.py (line 136, ssl fix).\n**Learned**: When Render reports update_failed but the server still responds, it means the new deploy crashed and reverted to the previous live version. Always check for undefined functions/references as the first diagnostic step. ssl=True in asyncpg causes CERTIFICATE_VERIFY_FAILED; must be ssl=\"require\" for Supabase pooler."
+    },
+    {
+      "id": 18,
+      "title": "Bridge needs setsid to survive in codespace",
+      "type": "discovery",
+      "topic": "architecture/cai-bridge",
+      "created": "2026-08-30 04:25:29",
+      "content": "**What**: Bridge.js must be launched with `setsid node bridge.js &` instead of `nohup node bridge.js &` in the codespace environment.\n**Why**: The bash tool kills all child processes when the shell session ends. nohup/disown don't prevent this because the processes are still in the same process group. setsid creates a new session, making the bridge survive independently.\n**Where**: control/worker/bridge.js — operational, not a code change.\n**Learned**: In containerized/CI environments, background processes die with the shell. setsid is more reliable than nohup/disown for persistence. The bridge has no error handling for silent death — consider adding a watchdog or systemd unit for production."
+    },
+    {
+      "id": 19,
+      "title": "Plan definitivo: Bridge → Carlos Code (actualizado)",
+      "type": "architecture",
+      "topic": "architecture/carlos-code-plan",
+      "created": "2026-08-30 06:48:33",
+      "content": "**What**: Plan definitivo para evolucionar Bridge → Carlos Code: 5 servicios en 5 cuentas Render free (C1: Web Panel, C2: Carlos Code orquestador, C3: Engram MCP, C4: Carlos Free Gateway, C5: Context7+grep_app). DeepSeek vía API key configurable. Carlos Code solo planifica por defecto, con flag EDIT_MODE para edición. Skills de orquestación: sdd-explore, sdd-propose, sdd-spec, sdd-tasks, work-unit-commits.\n**Why**: El usuario quiere un sistema distribuido de desarrollo con inteligencia artificial, optimizado para Render free tier con 5+ cuentas.\n**Where**: setup/CARLOS_CODE_PLAN.md, Engram topic architecture/carlos-code-plan.\n**Learned**: DeepSeek API key: sk-d3f5...dc4b (cambiable en cualquier momento). Trabajadoras: múltiples PCs Linux/Windows. Engram separado por tema de RAM. Stack: Python 3.11 + FastAPI + httpx + SQLite + uvicorn."
+    },
+    {
+      "id": 20,
+      "title": "Carlos Free Gateway creado y testeado",
+      "type": "architecture",
+      "topic": "architecture/carlos-code-gateway",
+      "created": "2026-08-30 07:20:00",
+      "content": "**What**: Carlos Free Gateway creado en control/gateway/. Proxy a DeepSeek API con endpoint /v1/chat/completions compatible OpenAI. Health check, modelos, admin endpoints para cambio de API key en caliente. Testeado: health OK, models OK, DeepSeek call falla por saldo (Insufficient Balance).\n**Why**: Necesitábamos un proxy ligero a DeepSeek que permitiera cambiar la API key sin redeploy.\n**Where**: control/gateway/server.py, control/gateway/requirements.txt, control/gateway/Dockerfile.\n**Learned**: Gateway funciona correctamente. DeepSeek API key no tiene crédito actualmente. Cuando tenga crédito, funcionará automáticamente."
+    },
+    {
+      "id": 21,
+      "title": "Carlos Code orquestador creado e integrado",
+      "type": "architecture",
+      "topic": "architecture/carlos-code-orchestrator",
+      "created": "2026-08-30 07:25:00",
+      "content": "**What**: Carlos Code creado en control/carlos_code/. Orquestador que recibe prompts y planifica distribución de trabajo. Plan directo (sin LLM) + fallback cuando DeepSeek no está disponible. Integrado con Web Panel: api_task intenta Carlos Code primero, fallback a leader PC. api/state incluye campo carlos_code con disponibilidad.\n**Why**: Necesitábamos un orquestador centralizado que planificara usando DeepSeek en vez de que cada leader PC planificara localmente.\n**Where**: control/carlos_code/server.py, control/server/carlos_code_integration.py, control/server/server.py (modificado).\n**Learned**: Carlos Code se activa automáticamente si CARLOS_CODE_URL está configurado. Si falla, el sistema cae al flujo original. EDIT_MODE permite edición directa cuando no hay workers."
+    },
+    {
+      "id": 22,
+      "title": "Engram MCP + Context7/grep_app + Setup trabajadoras",
+      "type": "architecture",
+      "topic": "architecture/carlos-code-complete",
+      "created": "2026-08-30 07:35:00",
+      "content": "**What**: Engram MCP (control/engram_mcp/) creado con SQLite, todos los endpoints operativos (save, search, get, recent, update, delete, stats). Context7+grep_app (control/context7_grep/) creado con fallback gracefully. Setup trabajadoras: setup/SETUP_WORKERS.md + setup/setup-worker.sh con setup automático.\n**Why**: Completar todos los componentes del sistema Carlos Code.\n**Where**: control/engram_mcp/, control/context7_grep/, setup/.\n**Learned**: Todos los servicios funcionan localmente. En Render necesitarán env vars (GATEWORK_URL, DEEPSEEK_API_KEY, etc.). Context7/grep_app pueden no ser accesibles desde ciertos entornos pero manejan errores gracefully."
+    },
+    {
+      "id": 23,
+      "title": "Carlos Code reconstruido como sistema real de agentes",
+      "type": "architecture",
+      "topic": "architecture/carlos-code-real",
+      "created": "2026-08-30 07:52:00",
+      "content": "**What**: Carlos Code reconstruido con componentes reales: AgentLoop con tool calling, 6 tools built-in (glob, grep, read, edit, write, bash), 25 skills cargadas, Provider system (Gateway/DeepSeek), MCP client, SDD workflow (explore→propose→spec→design→tasks), streaming SSE, server FastAPI completo.\n**Why**: El usuario pidió un sistema real como OpenCode/Gentle AI, no solo wrappers HTTP.\n**Where**: control/carlos_code/ — core/agent.py, core/sdd.py, tools/builtin.py, providers/provider.py, mcp/client.py, skills/loader.py, server.py.\n**Learned**: Agent loop: prompt→LLM→parse tool calls→execute tools→loop. Tools con JSON schema para OpenAI function calling. Skills se cargan desde filesystem. SDD produce artifacts JSON por fase. Streaming via SSE."
+    },
+    {
+      "id": 24,
+      "title": "Conectado Engram agente al proyecto CAI + skill/MCP Render instalados",
+      "type": "architecture",
+      "topic": "architecture/engram-agent-connection",
+      "created": "2026-09-05 11:05:28",
+      "content": "**What**: Conecté el agente al Engram del proyecto CAI: importé las 22 observaciones históricas de cai/engram/observations.json al Engram local (proyecto \"cai\"), configuré el MCP de engram en opencode.jsonc con `--project cai`, instalé la skill render (registry) y el MCP oficial de Render (https://mcp.render.com/mcp con header Authorization Bearer {env:RENDER_API_KEY}). Cloné el repo 1000carlospena-prog/cai en /workspaces/ooooooo/cai (carpeta permanente).\n**Why**: El usuario pidió conectar el agente al Engram de cai/engram (memoria del ecosistema Carlos AI) y que ahí se actualice siempre; e instalar skill + MCP de Render para revisar servicios.\n**Where**: /workspaces/ooooooo/cai (clon), ~/.engram/engram.db (proyecto cai, 22 obs importadas), /home/codespace/.config/opencode/opencode.jsonc (MCP engram --project cai + MCP render), /home/codespace/.config/opencode/skills/render/SKILL.md, /workspaces/ooooooo/.atl/skill-registry.md.\n**Learned**: (1) el observations.json de cai tenía JSON malformado (comillas faltantes en **Learned** de obs 20 y 21); lo corregí al importar con reemplazos exactos. (2) engram import exige session_id válido por FK: hay que incluir sessions[] en el JSON de import. (3) el MCP de Render oficial es remoto: mcp.render.com/mcp, OAuth en Claude/Codex/Cursor, API key en otros hosts. (4) El export del CLI engram v1.20.0 trae formato v0.1.0 con sessions/observations/prompts separados por proyecto."
+    }
+  ]
+}

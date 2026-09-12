@@ -1,0 +1,608 @@
+=============================================================================
+  CONVERSACIÓN REAL: OpenCode ↔ API del Modelo LLM
+  Trace completo de HTTP requests/responses
+  Ejemplo: "Haz un plan para poner los números 1, 3, 4 en un documento.txt
+            y después ejecútalo en la carpeta ejemplo/numeros"
+=============================================================================
+
+
+═══════════════════════════════════════════════════════════════════════════════
+  CONTEXTO
+═══════════════════════════════════════════════════════════════════════════════
+
+Modelo actual: mimo-v2.5-free (provider: opencode)
+Endpoints de la API:
+  - OpenCode Server local → Provider API (Anthropic/OpenAI/DeepSeek/etc)
+  - Protocolo: OpenAI-compatible (chat completions)
+
+La comunicación real es:
+
+  TUI (terminal) ←→ OpenCode Server ←→ Provider API (ej: api.anthropic.com)
+
+El usuario NO habla directamente con la API. OpenCode Server es el intermediario.
+
+
+═══════════════════════════════════════════════════════════════════════════════
+  PASO 1: Usuario escribe el prompt
+═══════════════════════════════════════════════════════════════════════════════
+
+[USUARIO] en TUI:
+  "Haz un plan para poner los números 1, 3, 4 en un documento.txt
+   y después ejecútalo en la carpeta ejemplo/numeros"
+
+OpenCode recibe el texto y construye el request a la API.
+
+
+═══════════════════════════════════════════════════════════════════════════════
+  PASO 2: OpenCode → API (PRIMER REQUEST)
+═══════════════════════════════════════════════════════════════════════════════
+
+┌─ HTTP REQUEST ──────────────────────────────────────────────────────────────┐
+│                                                                             │
+│ POST https://api.opencode.ai/v1/chat/completions  (o provider específico)  │
+│ Content-Type: application/json                                              │
+│ Authorization: Bearer <api-key>                                             │
+│                                                                             │
+│ {                                                                           │
+│   "model": "mimo-v2.5-free",                                               │
+│   "temperature": 1,                                                         │
+│   "max_tokens": 8192,                                                       │
+│   "messages": [                                                             │
+│     {                                                                       │
+│       "role": "system",                                                     │
+│       "content": "Eres un asistente de programación experto...\n\n          │
+│         ## Tools disponibles\n                       │
+│         - read: Lee archivos\n                        │
+│         - write: Escribe archivos\n                   │
+│         - edit: Edita archivos\n                      │
+│         - bash: Ejecuta comandos\n                    │
+│         - glob: Busca archivos\n                      │
+│         - grep: Busca contenido\n                     │
+│         - task: Delega a sub-agente\n                 │
+│         ... (tools completos con JSON schema) ..."   │
+│     },                                                                      │
+│     {                                                                       │
+│       "role": "user",                                                       │
+│       "content": "Haz un plan para poner los números 1, 3, 4 en un          │
+│         documento.txt y después ejecútalo en la carpeta ejemplo/numeros"    │
+│     }                                                                       │
+│   ],                                                                        │
+│   "tools": [                                                                │
+│     {                                                                       │
+│       "type": "function",                                                   │
+│       "function": {                                                         │
+│         "name": "bash",                                                     │
+│         "description": "Execute a bash command",                            │
+│         "parameters": {                                                     │
+│           "type": "object",                                                 │
+│           "properties": {                                                   │
+│             "command": {                                                    │
+│               "type": "string",                                             │
+│               "description": "The command to execute"                       │
+│             }                                                               │
+│           },                                                                │
+│           "required": ["command"]                                           │
+│         }                                                                   │
+│       }                                                                     │
+│     },                                                                      │
+│     {                                                                       │
+│       "type": "function",                                                   │
+│       "function": {                                                         │
+│         "name": "write",                                                    │
+│         "description": "Write a file to the local filesystem",              │
+│         "parameters": {                                                     │
+│           "type": "object",                                                 │
+│           "properties": {                                                   │
+│             "content": {                                                    │
+│               "type": "string",                                             │
+│               "description": "Content to write"                             │
+│             },                                                              │
+│             "filePath": {                                                   │
+│               "type": "string",                                             │
+│               "description": "Absolute path to file"                        │
+│             }                                                               │
+│           },                                                                │
+│           "required": ["content", "filePath"]                               │
+│         }                                                                   │
+│       }                                                                     │
+│     },                                                                      │
+│     {                                                                       │
+│       "type": "function",                                                   │
+│       "function": {                                                         │
+│         "name": "read",                                                     │
+│         "description": "Read a file from the local filesystem",             │
+│         "parameters": {                                                     │
+│           "type": "object",                                                 │
+│           "properties": {                                                   │
+│             "filePath": {                                                   │
+│               "type": "string",                                             │
+│               "description": "Path to file"                                 │
+│             }                                                               │
+│           },                                                                │
+│           "required": ["filePath"]                                          │
+│         }                                                                   │
+│       }                                                                     │
+│     },                                                                      │
+│     {                                                                       │
+│       "type": "function",                                                   │
+│       "function": {                                                         │
+│         "name": "glob",                                                     │
+│         "description": "Find files matching a glob pattern",                │
+│         "parameters": {                                                     │
+│           "type": "object",                                                 │
+│           "properties": {                                                   │
+│             "pattern": {                                                    │
+│               "type": "string",                                             │
+│               "description": "Glob pattern"                                 │
+│             }                                                               │
+│           },                                                                │
+│           "required": ["pattern"]                                           │
+│         }                                                                   │
+│       }                                                                     │
+│     },                                                                      │
+│     {                                                                       │
+│       "type": "function",                                                   │
+│       "function": {                                                         │
+│         "name": "task",                                                     │
+│         "description": "Launch a sub-agent for complex tasks",              │
+│         "parameters": {                                                     │
+│           "type": "object",                                                 │
+│           "properties": {                                                   │
+│             "description": {                                                │
+│               "type": "string",                                             │
+│               "description": "Short description"                            │
+│             },                                                              │
+│             "prompt": {                                                     │
+│               "type": "string",                                             │
+│               "description": "Full task for the sub-agent"                  │
+│             },                                                              │
+│             "subagent_type": {                                              │
+│               "type": "string",                                             │
+│               "description": "Agent type to use"                            │
+│             }                                                               │
+│           },                                                                │
+│           "required": ["description", "prompt", "subagent_type"]            │
+│         }                                                                   │
+│       }                                                                     │
+│     }                                                                       │
+│     // ... más tools (edit, grep, question, todowrite, webfetch, etc)       │
+│   ],                                                                        │
+│   "stream": false                                                           │
+│ }                                                                           │
+│                                                                             │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+
+═══════════════════════════════════════════════════════════════════════════════
+  PASO 3: API → OpenCode (PRIMER RESPONSE)
+═══════════════════════════════════════════════════════════════════════════════
+
+┌─ HTTP RESPONSE ─────────────────────────────────────────────────────────────┐
+│                                                                             │
+│ HTTP/1.1 200 OK                                                             │
+│ Content-Type: application/json                                              │
+│                                                                             │
+│ {                                                                           │
+│   "id": "chatcmpl-abc123def456",                                           │
+│   "object": "chat.completion",                                              │
+│   "created": 1757145600,                                                    │
+│   "model": "mimo-v2.5-free",                                               │
+│   "choices": [                                                              │
+│     {                                                                       │
+│       "index": 0,                                                           │
+│       "message": {                                                          │
+│         "role": "assistant",                                                │
+│         "content": null,                                                    │
+│         "tool_calls": [                                                     │
+│           {                                                                 │
+│             "id": "call_xyz789",                                            │
+│             "type": "function",                                             │
+│             "function": {                                                   │
+│               "name": "bash",                                               │
+│               "arguments": "{\"command\":\"mkdir -p /workspaces/ooooooo/    │
+│                 ejemplo/numeros\"}"                                          │
+│             }                                                               │
+│           }                                                                 │
+│         ]                                                                   │
+│       },                                                                    │
+│       "finish_reason": "tool_calls"                                         │
+│     }                                                                       │
+│   ],                                                                        │
+│   "usage": {                                                                │
+│     "prompt_tokens": 1250,                                                  │
+│     "completion_tokens": 45,                                                │
+│     "total_tokens": 1295                                                    │
+│   }                                                                         │
+│ }                                                                           │
+│                                                                             │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+ANÁLISIS DEL RESPONSE:
+  - "content": null → el modelo NO respondió texto, respondió con tool_call
+  - "tool_calls": lista de herramientas a ejecutar
+  - "finish_reason": "tool_calls" → el modelo quiere que ejecutes algo
+  - "usage": tokens consumidos (prompt=1250, completion=45)
+
+
+═══════════════════════════════════════════════════════════════════════════════
+  PASO 4: OpenCode ejecuta el tool_call
+═══════════════════════════════════════════════════════════════════════════════
+
+OpenCode recibe el tool_call y lo ejecuta internamente:
+
+  Herramienta: bash
+  Argumentos: { "command": "mkdir -p /workspaces/ooooooo/ejemplo/numeros" }
+  
+  Ejecución real:
+    $ mkdir -p /workspaces/ooooooo/ejemplo/numeros
+    (exit code: 0, sin output)
+
+  Resultado de la herramienta:
+    { "isError": false, "content": "" }
+
+
+═══════════════════════════════════════════════════════════════════════════════
+  PASO 5: OpenCode → API (SEGUNDO REQUEST — con resultado del tool)
+═══════════════════════════════════════════════════════════════════════════════
+
+┌─ HTTP REQUEST ──────────────────────────────────────────────────────────────┐
+│                                                                             │
+│ POST https://api.opencode.ai/v1/chat/completions                           │
+│ Content-Type: application/json                                              │
+│ Authorization: Bearer <api-key>                                             │
+│                                                                             │
+│ {                                                                           │
+│   "model": "mimo-v2.5-free",                                               │
+│   "temperature": 1,                                                         │
+│   "max_tokens": 8192,                                                       │
+│   "messages": [                                                             │
+│     {                                                                       │
+│       "role": "system",                                                     │
+│       "content": "Eres un asistente de programación experto..."             │
+│     },                                                                      │
+│     {                                                                       │
+│       "role": "user",                                                       │
+│       "content": "Haz un plan para poner los números 1, 3, 4 en un          │
+│         documento.txt y después ejecútalo en la carpeta ejemplo/numeros"    │
+│     },                                                                      │
+│     {                                                                       │
+│       "role": "assistant",                                                  │
+│       "content": null,                                                      │
+│       "tool_calls": [                                                       │
+│         {                                                                   │
+│           "id": "call_xyz789",                                              │
+│           "type": "function",                                               │
+│           "function": {                                                     │
+│             "name": "bash",                                                 │
+│             "arguments": "{\"command\":\"mkdir -p /workspaces/ooooooo/      │
+│               ejemplo/numeros\"}"                                            │
+│           }                                                                 │
+│         }                                                                   │
+│       ]                                                                     │
+│     },                                                                      │
+│     {                                                                       │
+│       "role": "tool",                                                       │
+│       "tool_call_id": "call_xyz789",                                        │
+│       "content": ""                                                         │
+│     }                                                                       │
+│   ],                                                                        │
+│   "tools": [                                                                │
+│     // ... mismos tools que antes ...                                       │
+│   ],                                                                        │
+│   "stream": false                                                           │
+│ }                                                                           │
+│                                                                             │
+│ NOTA: Se agregaron 2 mensajes al historial:                                 │
+│   1. assistant con tool_calls (el modelo pidió ejecutar bash)              │
+│   2. tool con el resultado (el output de bash)                              │
+│                                                                             │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+
+═══════════════════════════════════════════════════════════════════════════════
+  PASO 6: API → OpenCode (SEGUNDO RESPONSE)
+═══════════════════════════════════════════════════════════════════════════════
+
+┌─ HTTP RESPONSE ─────────────────────────────────────────────────────────────┐
+│                                                                             │
+│ HTTP/1.1 200 OK                                                             │
+│                                                                             │
+│ {                                                                           │
+│   "id": "chatcmpl-abc123def457",                                           │
+│   "object": "chat.completion",                                              │
+│   "created": 1757145602,                                                    │
+│   "model": "mimo-v2.5-free",                                               │
+│   "choices": [                                                              │
+│     {                                                                       │
+│       "index": 0,                                                           │
+│       "message": {                                                          │
+│         "role": "assistant",                                                │
+│         "content": null,                                                    │
+│         "tool_calls": [                                                     │
+│           {                                                                 │
+│             "id": "call_abc456",                                            │
+│             "type": "function",                                             │
+│             "function": {                                                   │
+│               "name": "write",                                              │
+│               "arguments": "{\"content\":\"1\\n3\\n4\",                     │
+│                 \"filePath\":\"/workspaces/ooooooo/ejemplo/numeros/          │
+│                 documento.txt\"}"                                            │
+│             }                                                               │
+│           }                                                                 │
+│         ]                                                                   │
+│       },                                                                    │
+│       "finish_reason": "tool_calls"                                         │
+│     }                                                                       │
+│   ],                                                                        │
+│   "usage": {                                                                │
+│     "prompt_tokens": 1280,                                                  │
+│     "completion_tokens": 35,                                                │
+│     "total_tokens": 1315                                                    │
+│   }                                                                         │
+│ }                                                                           │
+│                                                                             │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+ANÁLISIS:
+  - El modelo decidió crear el archivo con el contenido "1\n3\n4"
+  - path: /workspaces/ooooooo/ejemplo/numeros/documento.txt
+  - finish_reason: "tool_calls" → sigue habiendo más tools a ejecutar
+
+
+═══════════════════════════════════════════════════════════════════════════════
+  PASO 7: OpenCode ejecuta el tool_call (write)
+═══════════════════════════════════════════════════════════════════════════════
+
+Herramienta: write
+Argumentos: {
+  "content": "1\n3\n4",
+  "filePath": "/workspaces/ooooooo/ejemplo/numeros/documento.txt"
+}
+
+Ejecución real:
+  $ echo -e "1\n3\n4" > /workspaces/ooooooo/ejemplo/numeros/documento.txt
+  (exit code: 0)
+
+Resultado:
+  { "isError": false, "content": "File written successfully" }
+
+
+═══════════════════════════════════════════════════════════════════════════════
+  PASO 8: OpenCode → API (TERCER REQUEST)
+═══════════════════════════════════════════════════════════════════════════════
+
+┌─ HTTP REQUEST ──────────────────────────────────────────────────────────────┐
+│                                                                             │
+│ POST https://api.opencode.ai/v1/chat/completions                           │
+│                                                                             │
+│ {                                                                           │
+│   "model": "mimo-v2.5-free",                                               │
+│   "temperature": 1,                                                         │
+│   "max_tokens": 8192,                                                       │
+│   "messages": [                                                             │
+│     { "role": "system", "content": "Eres un asistente..." },                │
+│     { "role": "user", "content": "Haz un plan para poner..." },             │
+│     { "role": "assistant", "content": null,                                 │
+│       "tool_calls": [{ "id": "call_xyz789", "function": {                  │
+│         "name": "bash", "arguments": "{\"command\":\"mkdir -p...\"}" }}] }, │
+│     { "role": "tool", "tool_call_id": "call_xyz789", "content": "" },      │
+│     { "role": "assistant", "content": null,                                 │
+│       "tool_calls": [{ "id": "call_abc456", "function": {                  │
+│         "name": "write", "arguments": "{\"content\":\"1\\n3\\n4\"..." }}] },│
+│     { "role": "tool", "tool_call_id": "call_abc456",                       │
+│       "content": "File written successfully" }                              │
+│   ],                                                                        │
+│   "tools": [ /* mismos tools */ ],                                          │
+│   "stream": false                                                           │
+│ }                                                                           │
+│                                                                             │
+│ NOTA: Ahora hay 6 mensajes en el historial:                                 │
+│   1. system                                                                │
+│   2. user                                                                  │
+│   3. assistant (tool_call: mkdir)                                           │
+│   4. tool (resultado: "")                                                   │
+│   5. assistant (tool_call: write)                                           │
+│   6. tool (resultado: "File written")                                       │
+│                                                                             │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+
+═══════════════════════════════════════════════════════════════════════════════
+  PASO 9: API → OpenCode (TERCER RESPONSE — RESPUESTA FINAL)
+═══════════════════════════════════════════════════════════════════════════════
+
+┌─ HTTP RESPONSE ─────────────────────────────────────────────────────────────┐
+│                                                                             │
+│ HTTP/1.1 200 OK                                                             │
+│                                                                             │
+│ {                                                                           │
+│   "id": "chatcmpl-abc123def458",                                           │
+│   "object": "chat.completion",                                              │
+│   "created": 1757145604,                                                    │
+│   "model": "mimo-v2.5-free",                                               │
+│   "choices": [                                                              │
+│     {                                                                       │
+│       "index": 0,                                                           │
+│       "message": {                                                          │
+│         "role": "assistant",                                                │
+│         "content": "Listo. Creé la carpeta ejemplo/numeros/ y el archivo    │
+│           documento.txt con los números 1, 3 y 4 (uno por línea).",        │
+│         "tool_calls": null                                                  │
+│       },                                                                    │
+│       "finish_reason": "stop"                                               │
+│     }                                                                       │
+│   ],                                                                        │
+│   "usage": {                                                                │
+│     "prompt_tokens": 1320,                                                  │
+│     "completion_tokens": 28,                                                │
+│     "total_tokens": 1348                                                    │
+│   }                                                                         │
+│ }                                                                           │
+│                                                                             │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+ANÁLISIS:
+  - "content": "Listo. Creé la carpeta..." → respuesta de TEXTO (no tool_call)
+  - "tool_calls": null → no pide más herramientas
+  - "finish_reason": "stop" → la conversación terminó
+  - OpenCode muestra este texto al usuario en la TUI
+
+
+═══════════════════════════════════════════════════════════════════════════════
+  PASO 10: OpenCode → Usuario (respuesta final)
+═══════════════════════════════════════════════════════════════════════════════
+
+[OpenCode TUI] muestra al usuario:
+
+  "Listo. Creé la carpeta ejemplo/numeros/ y el archivo
+   documento.txt con los números 1, 3 y 4 (uno por línea)."
+
+El usuario ve la respuesta final. No ve los tool calls intermedios.
+
+
+═══════════════════════════════════════════════════════════════════════════════
+  RESUMEN DEL FLUJO COMPLETO
+═══════════════════════════════════════════════════════════════════════════════
+
+  USUARIO → OpenCode TUI
+    │
+    │ "Haz un plan para poner los números 1, 3, 4..."
+    ▼
+  OpenCode → API (Request 1)
+    │ POST /v1/chat/completions
+    │ { model, temperature, messages:[system,user], tools }
+    ▼
+  API → OpenCode (Response 1)
+    │ { tool_calls: [{ name:"bash", args:{command:"mkdir..."} }] }
+    │ finish_reason: "tool_calls"
+    ▼
+  OpenCode ejecuta: mkdir -p ejemplo/numeros
+    │
+    ▼
+  OpenCode → API (Request 2)
+    │ { messages:[system,user,assistant(tool_call),tool(result)] }
+    ▼
+  API → OpenCode (Response 2)
+    │ { tool_calls: [{ name:"write", args:{content:"1\n3\n4",...} }] }
+    │ finish_reason: "tool_calls"
+    ▼
+  OpenCode ejecuta: write documento.txt "1\n3\n4"
+    │
+    ▼
+  OpenCode → API (Request 3)
+    │ { messages:[...6 mensajes con historial completo] }
+    ▼
+  API → OpenCode (Response 3)
+    │ { content: "Listo. Creé la carpeta...", finish_reason: "stop" }
+    ▼
+  OpenCode → USUARIO
+    │ "Listo. Creé la carpeta ejemplo/numeros/..."
+    ▼
+  FIN
+
+
+═══════════════════════════════════════════════════════════════════════════════
+  DETALLES TÉCNICOS
+═══════════════════════════════════════════════════════════════════════════════
+
+TEMPERATURA:
+  - temperature: 1 (default) → respuestas más creativas/diversas
+  - temperature: 0 → respuestas más deterministas/predictibles
+  - OpenCode usa 1 por defecto, pero se puede configurar
+
+MAX_TOKENS:
+  - max_tokens: 8192 → límite de tokens en la respuesta
+  - Si la respuesta es más larga, se trunca
+  - Se puede configurar en opencode.json
+
+HISTORIAL:
+  - Cada request incluye TODOS los mensajes anteriores
+  - El historial crece con cada tool_call
+  - Ejemplo: Request 3 tiene 8 mensajes (system + user + 3 assistant + 3 tool)
+
+TOOLS DISPONIBLES:
+  - Se envían en CADA request (no se cachean)
+  - El modelo los ve como "functions" disponibles
+  - El modelo decide cuándo usarlos (no se lo obliga)
+
+TOOL_CALLS:
+  - El modelo responde con "tool_calls" en vez de "content"
+  - OpenCode ejecuta la herramienta
+  - El resultado se agrega como mensaje "tool"
+  - Se repite el ciclo hasta que "finish_reason": "stop"
+
+FINISH_REASONS:
+  - "tool_calls" → el modelo quiere ejecutar algo
+  - "stop" → el modelo terminó de responder
+  - "length" → se alcanzó max_tokens
+  - "content_filter" → el contenido fue filtrado
+
+STREAMING:
+  - "stream": false → recibe la respuesta completa de una vez
+  - "stream": true → recibe tokens incrementalmente (SSE)
+  - OpenCode puede usar ambos modos
+
+
+═══════════════════════════════════════════════════════════════════════════════
+  FORMATO COMPLETO DE UN TOOL DEFINITION
+═══════════════════════════════════════════════════════════════════════════════
+
+Así se ve la definición completa de una herramienta en el request:
+
+{
+  "type": "function",
+  "function": {
+    "name": "bash",
+    "description": "Executes a given bash command in a persistent shell session. Ensure proper handling of security measures.",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "command": {
+          "type": "string",
+          "description": "The command to execute"
+        },
+        "timeout": {
+          "type": "integer",
+          "description": "Optional timeout in milliseconds",
+          "minimum": -9007199254740991,
+          "exclusiveMinimum": 0
+        },
+        "workdir": {
+          "type": "string",
+          "description": "The working directory to run the command in"
+        }
+      },
+      "required": ["command"],
+      "additionalProperties": false
+    },
+    "strict": true
+  }
+}
+
+El modelo ve estas definiciones y decide cuándo y cómo usar cada tool.
+
+
+═══════════════════════════════════════════════════════════════════════════════
+  CÓMO EL MODELO SABE QUE HAY ERRORES
+═══════════════════════════════════════════════════════════════════════════════
+
+Cuando una herramienta falla, OpenCode envía el error como resultado:
+
+  tool_call: { "name": "read", "arguments": { "filePath": "/no/existe.py" } }
+  
+  Resultado:
+  {
+    "isError": true,
+    "content": "Error: ENOENT: no such file or directory '/no/existe.py'"
+  }
+
+El modelo LLM recibe este error en el mensaje "tool" y decide:
+  1. Informar al usuario: "No encontré el archivo..."
+  2. Reintentar con otra ruta
+  3. Usar glob para buscar el archivo
+  4. Crear el archivo si no existe
+
+El modelo TIENE acceso al error y puede reaccionar intelligentemente.
+
+
+═══════════════════════════════════════════════════════════════════════════════

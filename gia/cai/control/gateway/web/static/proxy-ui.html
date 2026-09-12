@@ -1,0 +1,304 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Proxy Manager - Gateway</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: 'Inter', system-ui, sans-serif; background: #f5f5f5; color: #1e293b; padding: 20px; }
+        .container { max-width: 1200px; margin: 0 auto; }
+        .header { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 30px; border-radius: 12px; margin-bottom: 30px; }
+        .status-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 20px; margin-bottom: 30px; }
+        .status-card { background: white; padding: 20px; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.1); }
+        .status-card .label { color: #666; font-size: 0.9rem; margin-bottom: 8px; }
+        .status-card .value { font-size: 1.2rem; font-weight: 600; color: #1a1a2e; word-break: break-all; }
+        .status-card .value .status-badge { padding: 4px 12px; border-radius: 20px; font-size: 0.9rem; }
+        .status-badge.green { background: #4CAF50; color: white; }
+        .status-badge.yellow { background: #FFA726; color: white; }
+        .status-badge.red { background: #f44336; color: white; }
+        .actions { display: flex; gap: 12px; margin: 20px 0; flex-wrap: wrap; }
+        .btn { padding: 10px 24px; border: none; border-radius: 6px; font-weight: 600; cursor: pointer; font-size: 0.9rem; transition: all 0.2s; }
+        .btn-primary { background: #667eea; color: white; }
+        .btn-primary:hover { background: #5a67d8; transform: translateY(-2px); }
+        .btn-warning { background: #f59e0b; color: white; }
+        .btn-warning:hover { background: #d97706; transform: translateY(-2px); }
+        .btn-danger { background: #ef4444; color: white; }
+        .btn-danger:hover { background: #dc2626; transform: translateY(-2px); }
+        .btn-secondary { background: #e2e8f0; color: #475569; }
+        .btn-secondary:hover { background: #cbd5e1; transform: translateY(-2px); }
+        .table-wrap { background: white; border-radius: 8px; overflow: hidden; box-shadow: 0 2px 8px rgba(0,0,0,0.1); }
+        table { width: 100%; border-collapse: collapse; font-size: 0.9rem; }
+        th { text-align: left; padding: 12px 16px; background: #f1f5f9; font-weight: 600; color: #475569; border-bottom: 2px solid #e2e8f0; }
+        td { padding: 10px 16px; border-bottom: 1px solid #f1f5f9; }
+        tr:hover td { background: #f8fafc; }
+        .status-badge { padding: 2px 12px; border-radius: 12px; font-size: 0.75rem; font-weight: 600; display: inline-block; }
+        .status-badge.up { background: #dcfce7; color: #16a34a; }
+        .status-badge.down { background: #fee2e2; color: #dc2626; }
+        .status-badge.residential { background: #dbeafe; color: #2563eb; }
+        .status-badge.datacenter { background: #f3e8ff; color: #7c3aed; }
+        .logs { background: #1a1a2e; color: #a5f3fc; padding: 16px; border-radius: 8px; max-height: 300px; overflow-y: auto; font-family: 'Courier New', monospace; font-size: 0.85rem; margin-top: 20px; line-height: 1.8; }
+        .log-entry { display: flex; gap: 12px; padding: 4px 0; border-bottom: 1px solid rgba(255,255,255,0.05); }
+        .log-time { color: #94a3b8; min-width: 80px; }
+        .log-msg { color: #e2e8f0; }
+        .no-data { text-align: center; padding: 40px; color: #94a3b8; }
+        .auto-refresh { font-size: 0.8rem; color: #64748b; display: flex; align-items: center; gap: 6px; margin-top: 10px; }
+        .auto-refresh .spinner { width: 16px; height: 16px; border: 2px solid #e2e8f0; border-top-color: #2563eb; border-radius: 50%; animation: spin 0.8s linear infinite; display: none; }
+        @keyframes spin { to { transform: rotate(360deg); } }
+        @media (max-width: 600px) { .status-bar { flex-direction: column; align-items: stretch; } .btn-group { justify-content: stretch; } .btn-group .btn { flex: 1; text-align: center; } table { font-size: 0.75rem; } td, th { padding: 8px 10px; } }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🚪 C2 Gateway - Proxy Manager</h1>
+            <p>Gestión de proxies para DeepSeek via proxmint/free-proxy-list</p>
+        </div>
+
+        <div class="status-grid" id="statusGrid">
+            <div class="status-card">
+                <div class="label">📡 Proxy Actual</div>
+                <div class="value" id="currentProxy">Cargando...</div>
+            </div>
+            <div class="status-card">
+                <div class="label">🔵 Estado</div>
+                <div class="value"><span class="status-badge" id="statusBadge">--</span></div>
+            </div>
+            <div class="status-card">
+                <div class="label">📊 Total Proxies</div>
+                <div class="value" id="totalProxies">0</div>
+            </div>
+            <div class="status-card">
+                <div class="label">⏱️ Última Latencia</div>
+                <div class="value" id="lastLatency">--</div>
+            </div>
+            <div class="status-card">
+                <div class="label">🔄 Última Actualización</div>
+                <div class="value" id="lastUpdate">--</div>
+            </div>
+            <div class="status-card">
+                <div class="label">⏰ Próxima Rotación</div>
+                <div class="value" id="nextRotation">--</div>
+            </div>
+            <div class="status-card">
+                <div class="label">🏠 Residenciales</div>
+                <div class="value" id="residentialCount">0</div>
+            </div>
+            <div class="status-card">
+                <div class="label">🏢 Datacenter</div>
+                <div class="value" id="datacenterCount">0</div>
+            </div>
+        </div>
+
+        <div class="actions">
+            <button class="btn btn-primary" id="refreshBtn"><i class="fas fa-sync"></i> Refrescar IPs</button>
+            <button class="btn btn-warning" id="changeBtn"><i class="fas fa-exchange-alt"></i> Cambiar IP</button>
+            <button class="btn btn-danger" id="clearBtn"><i class="fas fa-trash"></i> Limpiar Cache</button>
+        </div>
+
+        <div class="table-wrap">
+            <table>
+                <thead>
+                    <tr>
+                        <th>#</th>
+                        <th>IP / Host</th>
+                        <th>Puerto</th>
+                        <th>Protocolo</th>
+                        <th>Tipo IP</th>
+                        <th>País</th>
+                        <th>Estado</th>
+                        <th>Latencia</th>
+                        <th>Último Test</th>
+                    </tr>
+                </thead>
+                <tbody id="proxyTableBody">
+                    <tr><td colspan="9" class="no-data">Cargando proxies...</td></tr>
+                </tbody>
+            </table>
+        </div>
+
+        <div class="logs" id="logContainer">
+            <div class="log-entry"><span class="log-time">[--:--:--]</span><span class="log-msg">Inicializando...</span></div>
+        </div>
+
+        <div class="auto-refresh" style="margin-top:12px; justify-content:flex-end;">
+            <span>Auto-refresh: <span id="autoRefreshStatus">30s</span></span>
+            <div class="spinner" id="refreshSpinner"></div>
+        </div>
+    </div>
+
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <script>
+        class ProxyDashboard {
+            constructor() {
+                this.proxies = [];
+                this.autoRefreshInterval = null;
+                this.isRefreshing = false;
+                this.init();
+            }
+
+            init() {
+                this.bindEvents();
+                this.loadStatus();
+                this.startAutoRefresh();
+            }
+
+            bindEvents() {
+                document.getElementById('refreshBtn')?.addEventListener('click', () => this.loadStatus());
+                document.getElementById('changeBtn')?.addEventListener('click', () => this.handleChange());
+                document.getElementById('clearBtn')?.addEventListener('click', () => this.handleClear());
+            }
+
+            async loadStatus() {
+                if (this.isRefreshing) return;
+                this.isRefreshing = true;
+                this.showSpinner(true);
+
+                try {
+                    const response = await fetch('/proxy/status', {
+                        method: 'GET',
+                        headers: { 'Accept': 'application/json' }
+                    });
+
+                    if (!response.ok) throw new Error('HTTP ' + response.status);
+
+                    const data = await response.json();
+                    this.updateUI(data);
+                    this.addLog('info', 'Estado actualizado correctamente');
+
+                } catch (error) {
+                    console.error('Error loading proxy status:', error);
+                    this.addLog('error', 'Error al conectar con el gateway, usando datos de ejemplo');
+                    this.loadMockData();
+                } finally {
+                    this.isRefreshing = false;
+                    this.showSpinner(false);
+                }
+            }
+
+            loadMockData() {
+                this.proxies = [
+                    { id: 'proxy-1', name: 'Proxy USA', address: 'us.proxy.local:3128', healthy: true, latency: 45, lastCheck: new Date().toISOString() },
+                    { id: 'proxy-2', name: 'Proxy EU', address: 'eu.proxy.local:3128', healthy: false, latency: 120, lastCheck: new Date().toISOString() },
+                    { id: 'proxy-3', name: 'Proxy ASIA', address: 'asia.proxy.local:3128', healthy: true, latency: 89, lastCheck: new Date().toISOString() },
+                ];
+                this.updateUI();
+                this.addLog('info', 'Usando datos de muestra (mock)');
+            }
+
+            updateUI(data) {
+                if (data) {
+                    this.proxies = data.proxies || [];
+                }
+
+                const statusBadge = document.getElementById('statusBadge');
+                const statusText = document.getElementById('statusText');
+
+                if (data && data.status) {
+                    const status = data.status;
+                    document.getElementById('currentProxy').textContent = status.active_proxy ? status.active_proxy.url : 'Ninguno';
+                    document.getElementById('totalProxies').textContent = status.total_proxies || this.proxies.length;
+                    document.getElementById('lastLatency').textContent = (status.last_latency_ms || 0) + 'ms';
+                    document.getElementById('lastUpdate').textContent = status.last_refresh ? new Date(status.last_refresh).toLocaleString() : 'Nunca';
+                    document.getElementById('nextRotation').textContent = status.next_refresh ? new Date(status.next_refresh).toLocaleString() : 'Desconocido';
+
+                    // Count IP types
+                    const residential = this.proxies.filter(p => p.ip_type === 'residential').length;
+                    const datacenter = this.proxies.filter(p => p.ip_type === 'datacenter').length;
+                    document.getElementById('residentialCount').textContent = residential;
+                    document.getElementById('datacenterCount').textContent = datacenter;
+
+                    if (statusBadge) {
+                        if (status.is_healthy) {
+                            statusBadge.textContent = '🟢 Activa';
+                            statusBadge.className = 'status-badge green';
+                        } else if (status.failover_count > 0) {
+                            statusBadge.textContent = '🟡 Cambiando';
+                            statusBadge.className = 'status-badge yellow';
+                        } else {
+                            statusBadge.textContent = '🔴 Error';
+                            statusBadge.className = 'status-badge red';
+                        }
+                    }
+                }
+
+                this.renderProxyTable();
+                this.addLog('info', 'Estado actualizado correctamente');
+            }
+
+            renderProxyTable() {
+                const tbody = document.getElementById('proxyTableBody');
+                if (!this.proxies || this.proxies.length === 0) {
+                    tbody.innerHTML = '<tr><td colspan="9" class="no-data">No hay proxies disponibles</td></tr>';
+                    return;
+                }
+
+                tbody.innerHTML = this.proxies.map((proxy, i) => `
+                    <tr>
+                        <td>${i + 1}</td>
+                        <td>${proxy.host || proxy.url}</td>
+                        <td>${proxy.port || ''}</td>
+                        <td>${proxy.protocol || 'http'}</td>
+                        <td><span class="status-badge ${proxy.ip_type === 'residential' ? 'up' : 'down'}">${proxy.ip_type === 'residential' ? '🏠 Residencial' : proxy.ip_type === 'datacenter' ? '🏢 Datacenter' : '❓ ' + (proxy.ip_type || 'N/A')}</span></td>
+                        <td>${proxy.country || 'N/A'}</td>
+                        <td><span class="status-badge ${proxy.is_active ? 'up' : 'down'}">${proxy.is_active ? '✅ Activo' : '❌ Inactivo'}</span></td>
+                        <td>${proxy.latency ? proxy.latency + 'ms' : 'N/A'}</td>
+                        <td>${proxy.last_test ? new Date(proxy.last_test).toLocaleTimeString() : 'Nunca'}</td>
+                    </tr>
+                `).join('');
+            }
+
+            addLog(level, message) {
+                const container = document.getElementById('logContainer');
+                const entry = document.createElement('div');
+                entry.className = 'log-entry';
+                const time = new Date().toLocaleTimeString();
+                const levelIcon = level === 'error' ? '❌' : level === 'warn' ? '⚠️' : '✅';
+                entry.innerHTML = `<span class="log-time">[${time}]</span><span class="log-msg">${levelIcon} ${message}</span>`;
+                container.appendChild(entry);
+                container.scrollTop = container.scrollHeight;
+
+                while (container.children.length > 100) {
+                    container.removeChild(container.firstChild);
+                }
+            }
+
+            handleChange() {
+                fetch('/proxy/change', { method: 'POST' })
+                    .then(r => r.json())
+                    .then(d => { this.addLog('info', 'IP cambiada: ' + (d.proxy || d.message)); this.loadStatus(); })
+                    .catch(e => this.addLog('error', 'Error cambiando IP: ' + e.message));
+            }
+
+            handleClear() {
+                fetch('/proxy/clear-cache', { method: 'POST' })
+                    .then(r => r.json())
+                    .then(d => { this.addLog('info', 'Cache limpiado'); this.loadStatus(); })
+                    .catch(e => this.addLog('error', 'Error limpiando cache: ' + e.message));
+            }
+
+            startAutoRefresh() {
+                if (this.autoRefreshInterval) clearInterval(this.autoRefreshInterval);
+                this.autoRefreshInterval = setInterval(() => this.loadStatus(), 30000);
+                this.addLog('info', 'Auto-refresh activado (30s)');
+            }
+
+            stopAutoRefresh() {
+                if (this.autoRefreshInterval) {
+                    clearInterval(this.autoRefreshInterval);
+                    this.autoRefreshInterval = null;
+                }
+            }
+
+            showSpinner(show) {
+                document.getElementById('refreshSpinner').style.display = show ? 'block' : 'none';
+            }
+        }
+
+        document.addEventListener('DOMContentLoaded', () => {
+            window.proxyDashboard = new ProxyDashboard();
+        });
+    </script>
+</body>
+</html>
