@@ -1,0 +1,235 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# Render blueprint — SISTEMA MULTIAGENTE (10 servicios web, plan free)
+# Fase 14 (F2). Uso: subir el repo raíz a un GitHub repo y conectar los
+# servicios a sus respectivos directorios (buildContext).
+#
+# Cada servicio compila desde su subdirectorio con el repo GitHub del proyecto.
+# Requiere:
+#   DATABASE_URL (Supabase/Postgres), SESSION_SECRET, PANEL_PASSWORD,
+#   CONTROL_TOKEN (secreto compartido M2M)
+# ─────────────────────────────────────────────────────────────────────────────
+
+services:
+
+  # s1 — Panel (Go)
+  - name: s1-panel
+    type: web
+    runtime: docker
+    plan: free
+    dockerfilePath: ./desarrollo/s1-panel/Dockerfile
+    dockerContext: ./desarrollo/s1-panel
+    healthCheckPath: /health
+    envVars:
+      - key: PORT
+        value: "8080"
+      - key: DATABASE_URL
+        sync: false
+      - key: PANEL_USER
+        value: "admin"
+      - key: PANEL_PASSWORD
+        sync: false
+      - key: SESSION_SECRET
+        sync: false
+      - key: S2_URL
+        sync: false
+      - key: S2_NOTIFY_URL
+        sync: false
+      - key: CONTROL_TOKEN
+        sync: false
+      - key: SERVICES_BASE_URL
+        sync: false
+      - key: PROXY_MAX_IMPORT
+        value: "12"
+      - key: PROXY_CHECK_BATCH
+        value: "4"
+
+  # s2 — Orquestador (TypeScript/Bun)
+  - name: s2-carlos-code
+    type: web
+    runtime: docker
+    plan: free
+    dockerfilePath: ./desarrollo/s2-carlos-code/Dockerfile
+    dockerContext: ./desarrollo/s2-carlos-code
+    healthCheckPath: /health
+    envVars:
+      - key: PORT
+        value: "9002"
+      - key: DATABASE_URL
+        sync: false
+      - key: S1_URL
+        sync: false
+      - key: CONTROL_TOKEN
+        sync: false
+      - key: OPENCODE_URL
+        sync: false
+      - key: AGENT_MODE
+        value: "plan"
+      - key: S2_EMIT_ON_TASK
+        value: "0"
+      - key: S2_MOCK_PLAN
+        value: "0"
+      - key: CONTEXT_MAX_TOKENS
+        value: "200000"
+      - key: CONTEXT_COMPACT_AT
+        value: "170000"
+
+  # s3 — Engram wrapper (memoria persistente)
+  - name: s3-engram
+    type: web
+    runtime: docker
+    plan: free
+    dockerfilePath: ./desarrollo/s3-engram/Dockerfile
+    dockerContext: ./desarrollo/s3-engram
+    healthCheckPath: /health
+    envVars:
+      - key: PORT
+        value: "9003"
+      - key: S1_URL
+        sync: false
+      - key: CONTROL_TOKEN
+        sync: false
+      - key: ENGRAM_URL
+        sync: false
+
+  # s4 — MCPs status
+  - name: s4-mcps
+    type: web
+    runtime: docker
+    plan: free
+    dockerfilePath: ./desarrollo/s4-mcps/Dockerfile
+    dockerContext: ./desarrollo/s4-mcps
+    healthCheckPath: /health
+    envVars:
+      - key: PORT
+        value: "9004"
+      - key: S1_URL
+        sync: false
+
+  # s5 — Reservado (placeholder)
+  - name: s5-reservado
+    type: web
+    runtime: docker
+    plan: free
+    dockerfilePath: ./desarrollo/s5-reservado/Dockerfile
+    dockerContext: ./desarrollo/s5-reservado
+    healthCheckPath: /health
+    envVars:
+      - key: PORT
+        value: "9005"
+
+  # w6..w10 — Workers (5 servicios web, mismo Dockerfile, WORKER_ID distinto)
+  - name: worker-w6
+    type: web
+    runtime: docker
+    plan: free
+    dockerfilePath: ./desarrollo/workers/Dockerfile
+    dockerContext: ./desarrollo/workers
+    healthCheckPath: /health
+    envVars:
+      - key: PORT
+        value: "9006"
+      - key: WORKER_ID
+        value: "w6"
+      - key: S1_URL
+        sync: false
+      - key: CONTROL_TOKEN
+        sync: false
+      - key: OPENCODE_URL
+        sync: false
+      - key: WORKER_MOCK_BUILD
+        value: "0"
+
+  - name: worker-w7
+    type: web
+    runtime: docker
+    plan: free
+    dockerfilePath: ./desarrollo/workers/Dockerfile
+    dockerContext: ./desarrollo/workers
+    healthCheckPath: /health
+    envVars:
+      - key: PORT
+        value: "9007"
+      - key: WORKER_ID
+        value: "w7"
+      - key: S1_URL
+        sync: false
+      - key: CONTROL_TOKEN
+        sync: false
+      - key: OPENCODE_URL
+        sync: false
+      - key: WORKER_MOCK_BUILD
+        value: "0"
+
+  - name: worker-w8
+    type: web
+    runtime: docker
+    plan: free
+    dockerfilePath: ./desarrollo/workers/Dockerfile
+    dockerContext: ./desarrollo/workers
+    healthCheckPath: /health
+    envVars:
+      - key: PORT
+        value: "9008"
+      - key: WORKER_ID
+        value: "w8"
+      - key: S1_URL
+        sync: false
+      - key: CONTROL_TOKEN
+        sync: false
+      - key: OPENCODE_URL
+        sync: false
+      - key: WORKER_MOCK_BUILD
+        value: "0"
+
+  - name: worker-w9
+    type: web
+    runtime: docker
+    plan: free
+    dockerfilePath: ./desarrollo/workers/Dockerfile
+    dockerContext: ./desarrollo/workers
+    healthCheckPath: /health
+    envVars:
+      - key: PORT
+        value: "9009"
+      - key: WORKER_ID
+        value: "w9"
+      - key: S1_URL
+        sync: false
+      - key: CONTROL_TOKEN
+        sync: false
+      - key: OPENCODE_URL
+        sync: false
+      - key: WORKER_MOCK_BUILD
+        value: "0"
+
+  - name: worker-w10
+    type: web
+    runtime: docker
+    plan: free
+    dockerfilePath: ./desarrollo/workers/Dockerfile
+    dockerContext: ./desarrollo/workers
+    healthCheckPath: /health
+    envVars:
+      - key: PORT
+        value: "9010"
+      - key: WORKER_ID
+        value: "w10"
+      - key: S1_URL
+        sync: false
+      - key: CONTROL_TOKEN
+        sync: false
+      - key: OPENCODE_URL
+        sync: false
+      - key: WORKER_MOCK_BUILD
+        value: "0"
+
+  # Proxy local transparente para testing en dev (B5). No se despliega; el
+  # dispatcher lo usa solo en localhost. Descomentar solo si se desea proxy
+  # público auxiliar en Render (no recomendado en plan free).
+  # - name: proxy-local
+  #   type: web
+  #   runtime: python
+  #   plan: free
+  #   buildCommand: ""
+  #   startCommand: python scripts/proxy-local.py
+  #   healthCheckPath: /health
